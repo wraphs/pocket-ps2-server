@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Símbolos do controle (triângulo, círculo, xis, quadrado) em volta de um cabo -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#FF3DDC97" android:pathData="M54,30l7,12h-14z" />
+    <path android:fillColor="#FFFF6B6B" android:pathData="M72,54m-6,0a6,6 0,1 1,12 0a6,6 0,1 1,-12 0" />
+    <path android:fillColor="#FF5FA8FF" android:pathData="M49.8,63.8l1.4,-1.4l2.8,2.8l2.8,-2.8l1.4,1.4l-2.8,2.8l2.8,2.8l-1.4,1.4l-2.8,-2.8l-2.8,2.8l-1.4,-1.4l2.8,-2.8z" />
+    <path android:fillColor="#FFFF8AD8" android:pathData="M31,49h10v10h-10z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M53,44h2v6h-2z M53,58h2v4h-2z" />
+</vector>
