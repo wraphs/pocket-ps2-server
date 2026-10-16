@@ -19,6 +19,7 @@ import android.os.Looper
 import android.os.PowerManager
 import br.ps2ponte.core.PonteServer
 import br.ps2ponte.core.block.BlockDevice
+import br.ps2ponte.core.block.Particoes
 import br.ps2ponte.core.block.Sector512Adapter
 import br.ps2ponte.core.exfat.VirtualExFat
 import br.ps2ponte.core.fs.LocalTree
@@ -112,6 +113,12 @@ class ServidorService : Service() {
                 if (!guardar(minha, bd) { dispositivo = bd }) return
                 val gib = bd.sectorCount * 512 / (1024.0 * 1024 * 1024)
                 log.log("Pendrive: ${ms.description}, %.1f GiB%s".format(gib, if (ms.readOnly) ", protegido contra gravação" else ""))
+                val sistemas = Particoes.sistemas(bd)
+                if (sistemas.isNotEmpty()) log.log("Partições: ${sistemas.joinToString()}")
+                when {
+                    "NTFS" in sistemas -> log.log("⚠ Pendrive em NTFS: no modo bloco o PS2 só lê exFAT/FAT32. Use o modo Pasta (funciona com NTFS) ou formate em exFAT.")
+                    sistemas.isEmpty() -> log.log("⚠ Não reconheci exFAT/FAT32 neste disco; o PS2 pode não enxergar os jogos no modo bloco.")
+                }
                 novos += UdpbdServer(bd, log = log, stats = stats)
                 novos += UdpfsServer(null, bd, log = log, stats = stats)
             }

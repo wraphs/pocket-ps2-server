@@ -20,6 +20,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.os.storage.StorageManager
+import android.os.storage.StorageVolume
 import android.provider.DocumentsContract
 import android.provider.Settings
 import android.view.View
@@ -281,15 +282,30 @@ class MainActivity : Activity() {
         listaVolumes.removeAllViews()
         val sm = getSystemService(StorageManager::class.java)
         for (v in sm.storageVolumes) {
-            val dir = v.directory ?: continue
             if (v.state != Environment.MEDIA_MOUNTED) continue
-            listaVolumes.addView(botao("Usar a raiz de: ${v.getDescription(this)}\n${dir.path}") { definirPasta(dir.path) })
+            val dir = caminhoAcessivel(v) ?: continue
+            listaVolumes.addView(botao("Usar a raiz de: ${v.getDescription(this)}\n$dir") { definirPasta(dir) })
         }
         mostrarPasta()
     }
 
+    /**
+     * Caminho do volume que o app consegue abrir. Em alguns Samsung o Android informa o caminho interno
+     * /mnt/media_rw/<uuid> (só o sistema acessa); para os apps o pendrive fica em /storage/<uuid>.
+     */
+    private fun caminhoAcessivel(v: StorageVolume): String? {
+        val dir = v.directory?.path
+        val uuid = v.uuid ?: return dir
+        return if (dir == null || dir.startsWith("/mnt/") || !File(dir).canRead()) "/storage/$uuid" else dir
+    }
+
+    /** Pasta salva, corrigindo caminhos /mnt/media_rw/... gravados por versões anteriores. */
+    private fun pastaSalva(): String? = prefs.getString("pasta", null)?.let {
+        if (it.startsWith("/mnt/media_rw/")) "/storage/" + it.removePrefix("/mnt/media_rw/") else it
+    }
+
     private fun mostrarPasta() {
-        val pasta = prefs.getString("pasta", null)
+        val pasta = pastaSalva()
         if (pasta == null) {
             tvPasta.text = "Nenhuma pasta escolhida."
             btnCriarPastas.visibility = View.GONE
@@ -358,7 +374,7 @@ class MainActivity : Activity() {
                 abrirPermissaoArquivos()
                 return
             }
-            val pasta = prefs.getString("pasta", null) ?: return aviso("Escolha uma pasta")
+            val pasta = pastaSalva() ?: return aviso("Escolha uma pasta")
             if (!File(pasta).isDirectory) return aviso("Pasta não encontrada: $pasta")
             ServidorService.iniciar(this, ServidorService.MODO_PASTA, pasta, null)
         } else {
@@ -380,7 +396,7 @@ class MainActivity : Activity() {
     }
 
     private fun criarPastasOpl() {
-        val pasta = prefs.getString("pasta", null) ?: return
+        val pasta = pastaSalva() ?: return
         for (nome in listOf("DVD", "CD", "ART", "CFG", "CHT", "LNG", "THM", "VMC", "POPS", "APPS")) File(pasta, nome).mkdirs()
         mostrarPasta()
         aviso("Pastas criadas. Coloque os .iso em DVD (ou CD)")
@@ -416,7 +432,7 @@ class MainActivity : Activity() {
             File(Environment.getExternalStorageDirectory(), Environment.DIRECTORY_DOCUMENTS).path
         } else {
             getSystemService(StorageManager::class.java).storageVolumes
-                .firstOrNull { it.uuid.equals(vol, true) }?.directory?.path ?: "/storage/$vol"
+                .firstOrNull { it.uuid.equals(vol, true) }?.let { caminhoAcessivel(it) } ?: "/storage/$vol"
         }
         return if (rel.isEmpty()) base else "$base/$rel"
     }

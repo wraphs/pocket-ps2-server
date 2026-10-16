@@ -96,7 +96,9 @@ class SmbServer(
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
         listener?.let { closeQuietly(it) }
-        val threads = clients.values.toList()
+        // ArrayList(...) usa toArray(), seguro com remoções concorrentes; toList() lê o tamanho e depois
+        // o 1º item, e estoura se a última conexão terminar entre as duas leituras.
+        val threads = ArrayList(clients.values)
         for (s in clients.keys) closeQuietly(s)
         // As threads fecham os arquivos abertos ao sair; espera um pouco por elas.
         val deadline = System.currentTimeMillis() + 2000
