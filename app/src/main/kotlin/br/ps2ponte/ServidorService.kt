@@ -9,7 +9,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.hardware.usb.UsbManager
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import br.ps2ponte.core.PonteServer
 import br.ps2ponte.core.block.BlockDevice
@@ -20,6 +22,7 @@ import br.ps2ponte.core.smb.SmbServer
 import br.ps2ponte.core.udpbd.UdpbdServer
 import br.ps2ponte.core.udpfs.UdpfsServer
 import br.ps2ponte.usb.UsbMassStorage
+import java.io.Closeable
 import java.io.File
 
 /** Serviço em primeiro plano que mantém os servidores rodando com a tela apagada. */
@@ -29,6 +32,14 @@ class ServidorService : Service() {
     private var dispositivo: BlockDevice? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private val trava = Any()
+    private val principal = Handler(Looper.getMainLooper())
+
+    /**
+     * Muda a cada Iniciar e a cada Parar (sob [trava]). A thread de início de uma sessão que já foi
+     * encerrada (Parar no meio do "Iniciando...") desiste e fecha o que abriu, em vez de ligar
+     * servidores órfãos ou derrubar a sessão nova.
+     */
+    private var sessao = 0
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -50,13 +61,23 @@ class ServidorService : Service() {
                 val modo = intent.getStringExtra(EXTRA_MODO) ?: MODO_PASTA
                 val pasta = intent.getStringExtra(EXTRA_PASTA).orEmpty()
                 val usb = intent.getStringExtra(EXTRA_USB).orEmpty()
-                Thread({ iniciar(modo, pasta, usb) }, "ps2ponte-inicio").start()
+                val minha = synchronized(trava) { ++sessao }
+                Thread({ iniciar(minha, modo, pasta, usb) }, "ps2ponte-inicio").start()
             }
         }
         return START_NOT_STICKY
     }
 
-    private fun iniciar(modo: String, pasta: String, usbNome: String) {
+    private fun atual(minha: Int) = synchronized(trava) { sessao == minha }
+
+    /** Guarda [recurso] na sessão [minha]; se ela já foi encerrada, fecha o recurso e devolve false. */
+    private fun guardar(minha: Int, recurso: Closeable, guarda: () -> Unit): Boolean {
+        val ok = synchronized(trava) { (sessao == minha).also { if (it) guarda() } }
+        if (!ok) try { recurso.close() } catch (_: Exception) {}
+        return ok
+    }
+
+    private fun iniciar(minha: Int, modo: String, pasta: String, usbNome: String) {
         val log = Estado.eventLog
         val stats = Estado.stats
         try {
@@ -69,7 +90,7 @@ class ServidorService : Service() {
                 novos += SmbServer(tree, port = PORTA_SMB, shareName = "PS2SMB", log = log, stats = stats)
                 log.log("Montando o disco exFAT virtual (para UDPBD)...")
                 val exfat = VirtualExFat.build(raiz, log)
-                synchronized(trava) { dispositivo = exfat }
+                if (!guardar(minha, exfat) { dispositivo = exfat }) return
                 log.log("Disco virtual: ${exfat.describe()}")
                 novos += UdpfsServer(tree, exfat, log = log, stats = stats)
                 novos += UdpbdServer(exfat, log = log, stats = stats)
@@ -78,7 +99,7 @@ class ServidorService : Service() {
                 val dev = usb.deviceList[usbNome] ?: throw IllegalStateException("pendrive não encontrado (foi desconectado?)")
                 val ms = UsbMassStorage.open(usb, dev)
                 val bd: BlockDevice = if (ms.sectorSize == 512) ms else Sector512Adapter(ms)
-                synchronized(trava) { dispositivo = bd }
+                if (!guardar(minha, bd) { dispositivo = bd }) return
                 val gib = bd.sectorCount * 512 / (1024.0 * 1024 * 1024)
                 log.log("Pendrive: ${ms.description}, %.1f GiB%s".format(gib, if (ms.readOnly) ", protegido contra gravação" else ""))
                 novos += UdpbdServer(bd, log = log, stats = stats)
@@ -87,24 +108,35 @@ class ServidorService : Service() {
 
             val ligados = mutableListOf<String>()
             for (s in novos) {
-                if (!Estado.rodando) break
+                if (!atual(minha)) return
                 try {
                     s.start()
-                    synchronized(trava) { servidores += s }
-                    ligados += descricao(s)
-                    log.log("${descricao(s)} ligado")
                 } catch (e: Exception) {
                     log.log("${s.name}: não consegui abrir a porta (${e.message})")
+                    continue
                 }
+                if (!guardar(minha, s) { servidores += s }) return
+                ligados += descricao(s)
+                log.log("${descricao(s)} ligado")
             }
             if (ligados.isEmpty()) throw IllegalStateException("nenhum servidor ligou")
-            Estado.resumo = "Servindo: " + ligados.joinToString(" · ")
-            getSystemService(NotificationManager::class.java).notify(1, notificacao(Estado.resumo))
+            synchronized(trava) {
+                // Sob a trava: um Parar não cabe entre a conferência e o notify (a notificação voltaria depois dele)
+                if (sessao != minha) return
+                Estado.resumo = "Servindo: " + ligados.joinToString(" · ")
+                getSystemService(NotificationManager::class.java).notify(1, notificacao(Estado.resumo))
+            }
             Estado.avisar()
         } catch (e: Exception) {
+            if (!atual(minha)) return // o Parar chegou no meio e já encerrou tudo
             log.log("Erro: ${e.message}")
-            encerrar()
-            stopSelf()
+            // Encerra na thread principal, como o Parar: não corre com um Iniciar novo nem com o wake lock
+            principal.post {
+                if (atual(minha)) {
+                    encerrar()
+                    stopSelf()
+                }
+            }
         }
     }
 
@@ -119,6 +151,7 @@ class ServidorService : Service() {
         val parados: List<PonteServer>
         val dev: BlockDevice?
         synchronized(trava) {
+            sessao++
             parados = servidores.toList()
             servidores.clear()
             dev = dispositivo
