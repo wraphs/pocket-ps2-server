@@ -182,12 +182,15 @@ class MainActivity : Activity() {
         rbUsb = RadioButton(this).apply { text = "Pendrive/HD inteiro em modo bloco (só Neutrino/XEB+ via UDPBD)"; id = View.generateViewId() }
         grupo.addView(rbPasta)
         grupo.addView(rbUsb)
+        // Marca antes de pôr o ouvinte: o isChecked dispara o ouvinte do RadioGroup, e o atualizarModo()
+        // mexeria em painelPasta/painelUsb, que ainda não existem (o app fechava ao abrir). O onResume
+        // chama atualizarModo().
+        if (prefs.getString("modo", ServidorService.MODO_PASTA) == ServidorService.MODO_USB) rbUsb.isChecked = true else rbPasta.isChecked = true
         grupo.setOnCheckedChangeListener { _, id ->
             prefs.edit().putString("modo", if (id == rbUsb.id) ServidorService.MODO_USB else ServidorService.MODO_PASTA).apply()
             atualizarModo()
         }
         raiz.addView(grupo)
-        if (prefs.getString("modo", ServidorService.MODO_PASTA) == ServidorService.MODO_USB) rbUsb.isChecked = true else rbPasta.isChecked = true
 
         painelPasta = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         tvPasta = texto().also { painelPasta.addView(it) }
@@ -400,7 +403,7 @@ class MainActivity : Activity() {
         definirPasta(caminho)
     }
 
-    /** "primary:PS2" -> /storage/emulated/0/PS2 ; "1234-ABCD:PS2" -> /storage/1234-ABCD/PS2 */
+    /** "primary:PS2" -> /storage/emulated/0/PS2 ; "1234-ABCD:PS2" -> /storage/1234-ABCD/PS2 ; "home:PS2" -> .../Documents/PS2 */
     private fun caminhoDaArvore(uri: Uri): String? {
         if (uri.authority != "com.android.externalstorage.documents") return null
         val id = DocumentsContract.getTreeDocumentId(uri)
@@ -408,6 +411,9 @@ class MainActivity : Activity() {
         val rel = id.substringAfter(':', "")
         val base = if (vol.equals("primary", true)) {
             Environment.getExternalStorageDirectory().path
+        } else if (vol.equals("home", true)) {
+            // Raiz "Documentos" do seletor (ExternalStorageProvider)
+            File(Environment.getExternalStorageDirectory(), Environment.DIRECTORY_DOCUMENTS).path
         } else {
             getSystemService(StorageManager::class.java).storageVolumes
                 .firstOrNull { it.uuid.equals(vol, true) }?.directory?.path ?: "/storage/$vol"
