@@ -26,7 +26,7 @@ class UsbMassStorage private constructor(
 ) : BlockDevice {
     private val lock = Any()
     private var tag = 1
-    private val lun = 0
+    private var lun = 0
     private var closed = false
 
     override var sectorSize = 512; private set
@@ -35,31 +35,72 @@ class UsbMassStorage private constructor(
     var description = ""; private set
 
     private fun init() {
-        description = inquiry()
-        // Alguns pendrives respondem "unit attention"/"not ready" nas primeiras vezes
-        var ready = false
-        for (i in 0 until 10) {
-            if (command(cdb(0x00), 0, true, null, 0, quiet = true) == 0) { ready = true; break }
-            requestSense()
+        // Leitores de cartão (inclusive o que vem em muito hub USB-C) e pendrives U3 têm várias LUNs:
+        // usa a primeira que for um disco com mídia.
+        val maxLun = maxLun()
+        var erro: IOException? = null
+        for (l in 0..maxLun) {
+            lun = l
+            try {
+                initLun()
+                return
+            } catch (e: IOException) {
+                if (erro == null) erro = if (maxLun == 0) e else IOException("LUN $l: ${e.message}", e)
+            }
+        }
+        throw erro ?: IOException("o dispositivo USB não ficou pronto")
+    }
+
+    private fun initLun() {
+        val periferico = inquiry()
+        // Qualificador != 0: LUN vazia; tipo 5 = CD/DVD (a partição virtual dos pendrives U3)
+        if (periferico >= 0 && ((periferico shr 5) != 0 || (periferico and 0x1F) !in TIPOS_DISCO)) {
+            throw IOException("não é um disco (tipo de periférico ${periferico and 0x1F})")
+        }
+        // Alguns pendrives respondem "unit attention"/"not ready" nas primeiras vezes; HD externo pode
+        // levar vários segundos para girar o disco.
+        val limite = System.currentTimeMillis() + 10_000
+        while (command(cdb(0x00), 0, true, null, 0, quiet = true, sense = false) != 0) {
+            val s = requestSense()
+            val key = s shr 16
+            val asc = (s shr 8) and 0xFF
+            if (key == 2 && asc == 0x3A) throw IOException("sem mídia (cartão ou disco ausente)")
+            if (key == 2 && asc == 0x04 && (s and 0xFF) == 0x02) {
+                // "initializing command required": START STOP UNIT (START=1, IMMED=1), como o Linux faz
+                command(cdb(0x1B).also { it[1] = 0x01; it[4] = 0x01 }, 0, true, null, 0, quiet = true)
+            }
+            if (System.currentTimeMillis() > limite) throw IOException("o dispositivo USB não ficou pronto")
             Thread.sleep(200)
         }
-        if (!ready) throw IOException("o dispositivo USB não ficou pronto")
         readCapacity()
         readOnly = try { modeSenseWriteProtect() } catch (e: IOException) { false }
     }
 
-    private fun inquiry(): String {
+    /** GET MAX LUN (classe Bulk-Only). Dispositivo de uma LUN só pode responder com STALL. */
+    private fun maxLun(): Int {
+        val b = ByteArray(1)
+        val r = conn.controlTransfer(0xA1, 0xFE, 0, intf.id, b, 1, TIMEOUT_MS)
+        return if (r == 1) b[0].toInt() and 0x0F else 0
+    }
+
+    /** INQUIRY: preenche [description] e devolve o byte 0 (qualificador e tipo do periférico), ou -1 se falhou. */
+    private fun inquiry(): Int {
         val buf = ByteArray(36)
         val cb = cdb(0x12).also { it[4] = 36 }
-        if (command(cb, 36, true, buf, 0) != 0) return "USB"
+        if (command(cb, 36, true, buf, 0) != 0) {
+            description = "USB"
+            return -1
+        }
         val vendor = String(buf, 8, 8, Charsets.US_ASCII).trim()
         val product = String(buf, 16, 16, Charsets.US_ASCII).trim()
-        return listOf(vendor, product).filter { it.isNotEmpty() }.joinToString(" ").ifEmpty { "USB" }
+        description = listOf(vendor, product).filter { it.isNotEmpty() }.joinToString(" ").ifEmpty { "USB" }
+        return buf[0].toInt() and 0xFF
     }
 
     private fun readCapacity() {
         val buf = ByteArray(8)
-        if (command(cdb(0x25, 10), 8, true, buf, 0) != 0) throw IOException("READ CAPACITY falhou")
+        // O primeiro READ CAPACITY depois do TEST UNIT READY ainda pode voltar com "unit attention"
+        if ((0 until 3).none { command(cdb(0x25, 10), 8, true, buf, 0) == 0 }) throw IOException("READ CAPACITY falhou")
         val bb = ByteBuffer.wrap(buf).order(ByteOrder.BIG_ENDIAN)
         val last = bb.getInt(0).toLong() and 0xFFFFFFFFL
         sectorSize = bb.getInt(4)
@@ -84,11 +125,19 @@ class UsbMassStorage private constructor(
         return buf[2].toInt() and 0x80 != 0
     }
 
+    /**
+     * REQUEST SENSE: limpa a condição de erro do dispositivo (necessário depois de um CSW com falha).
+     * Devolve (chave shl 16) or (ASC shl 8) or ASCQ, ou 0 se o próprio REQUEST SENSE falhou.
+     */
     private fun requestSense(): Int {
         val buf = ByteArray(18)
         val cb = cdb(0x03).also { it[4] = 18 }
-        command(cb, 18, true, buf, 0, quiet = true, sense = false)
-        return buf[2].toInt() and 0x0F
+        if (command(cb, 18, true, buf, 0, quiet = true, sense = false) != 0) return 0
+        val desc = (buf[0].toInt() and 0x7F) >= 0x72 // formato descritor (0x72/0x73)
+        val key = (if (desc) buf[1] else buf[2]).toInt() and 0x0F
+        val asc = (if (desc) buf[2] else buf[12]).toInt() and 0xFF
+        val ascq = (if (desc) buf[3] else buf[13]).toInt() and 0xFF
+        return (key shl 16) or (asc shl 8) or ascq
     }
 
     override fun read(lba: Long, count: Int, buf: ByteArray, off: Int) = transfer(lba, count, buf, off, write = false)
@@ -101,8 +150,9 @@ class UsbMassStorage private constructor(
     private fun transfer(lba: Long, count: Int, buf: ByteArray, off: Int, write: Boolean) {
         if (lba < 0 || count < 0 || lba + count > sectorCount) throw IOException("setor fora do disco: $lba+$count")
         var done = 0
+        val maxBlocks = maxOf(1, MAX_BYTES_PER_CMD / sectorSize)
         while (done < count) {
-            val n = minOf(MAX_BLOCKS_PER_CMD, count - done)
+            val n = minOf(maxBlocks, count - done)
             val at = lba + done
             val cb = if (at + n <= 0xFFFFFFFFL) {
                 cdb(if (write) 0x2A else 0x28, 10).also {
@@ -117,7 +167,8 @@ class UsbMassStorage private constructor(
             }
             var status = -1
             for (attempt in 0 until 3) {
-                status = command(cb, n * sectorSize, !write, buf, off + done * sectorSize)
+                if (attempt > 0) Thread.sleep(100) // dá um respiro ao dispositivo depois da recuperação
+                status = command(cb, n * sectorSize, !write, buf, off + done * sectorSize, exato = true)
                 if (status == 0) break
             }
             if (status != 0) throw IOException("${if (write) "gravação" else "leitura"} USB falhou no setor $at")
@@ -128,8 +179,12 @@ class UsbMassStorage private constructor(
     /**
      * Um comando SCSI completo: CBW, dados, CSW. Devolve o status do CSW (0 = ok, 1 = falhou)
      * ou -1 em erro de transporte (depois de tentar a recuperação).
+     * [exato]: status "ok" com menos dados que o pedido (fase de dados curta ou residue) conta como falha.
      */
-    private fun command(cb: ByteArray, len: Int, dirIn: Boolean, buf: ByteArray?, off: Int, quiet: Boolean = false, sense: Boolean = true): Int = synchronized(lock) {
+    private fun command(
+        cb: ByteArray, len: Int, dirIn: Boolean, buf: ByteArray?, off: Int,
+        quiet: Boolean = false, sense: Boolean = true, exato: Boolean = false,
+    ): Int = synchronized(lock) {
         if (closed) throw IOException("dispositivo USB fechado")
         val t = tag++
         val cbw = ByteBuffer.allocate(31).order(ByteOrder.LITTLE_ENDIAN)
@@ -139,25 +194,35 @@ class UsbMassStorage private constructor(
             resetRecovery()
             return -1
         }
+        var done = 0
         if (len > 0 && buf != null) {
-            var done = 0
             val ep = if (dirIn) epIn else epOut
             while (done < len) {
                 val chunk = minOf(CHUNK, len - done)
                 val r = conn.bulkTransfer(ep, buf, off + done, chunk, TIMEOUT_MS)
-                if (r <= 0) {
+                if (r < 0 || (r == 0 && !dirIn)) {
+                    // STALL (ou erro): limpa o endpoint e vai para o CSW, como manda o BOT
                     clearHalt(ep)
                     break
                 }
                 done += r
-                if (dirIn && r < chunk) break // transferência curta
+                // Transferência curta, inclusive o pacote de tamanho zero (r == 0): fim dos dados, endpoint sadio
+                if (dirIn && r < chunk) break
             }
         }
         val csw = ByteArray(13)
-        var r = conn.bulkTransfer(epIn, csw, 13, TIMEOUT_MS)
-        if (r != 13) {
-            clearHalt(epIn)
+        var r: Int
+        if (dirIn && done == 13 && len > 13 && pareceCsw(buf!!, off, t)) {
+            // Alguns dispositivos pulam a fase de dados e mandam o CSW no lugar (o Linux trata igual)
+            System.arraycopy(buf, off, csw, 0, 13)
+            done = 0
+            r = 13
+        } else {
             r = conn.bulkTransfer(epIn, csw, 13, TIMEOUT_MS)
+            if (r != 13) {
+                clearHalt(epIn)
+                r = conn.bulkTransfer(epIn, csw, 13, TIMEOUT_MS)
+            }
         }
         val bb = ByteBuffer.wrap(csw).order(ByteOrder.LITTLE_ENDIAN)
         if (r != 13 || bb.getInt(0) != 0x53425355 || bb.getInt(4) != t) {
@@ -169,19 +234,19 @@ class UsbMassStorage private constructor(
             resetRecovery()
             return -1
         }
-        if (status == 1 && sense) requestSenseLocked()
+        if (status == 1 && sense) requestSense()
+        if (status == 0 && exato && (done != len || bb.getInt(8) != 0)) return 1
         return status
     }
 
-    private fun requestSenseLocked() {
-        // Limpa a condição de erro do dispositivo (necessário depois de um CSW com falha)
-        val buf = ByteArray(18)
-        val cb = cdb(0x03).also { it[4] = 18 }
-        command(cb, 18, true, buf, 0, quiet = true, sense = false)
+    private fun pareceCsw(b: ByteArray, o: Int, t: Int): Boolean {
+        val bb = ByteBuffer.wrap(b).order(ByteOrder.LITTLE_ENDIAN)
+        return bb.getInt(o) == 0x53425355 && bb.getInt(o + 4) == t
     }
 
     private fun clearHalt(ep: UsbEndpoint) {
-        // CLEAR_FEATURE(ENDPOINT_HALT)
+        // CLEAR_FEATURE(ENDPOINT_HALT). Depois de um STALL de verdade o xHCI já zerou o lado do Android,
+        // então os dois lados ficam em DATA0.
         conn.controlTransfer(0x02, 0x01, 0, ep.address, null, 0, TIMEOUT_MS)
     }
 
@@ -190,6 +255,12 @@ class UsbMassStorage private constructor(
         conn.controlTransfer(0x21, 0xFF, 0, intf.id, null, 0, TIMEOUT_MS)
         clearHalt(epIn)
         clearHalt(epOut)
+        // O CLEAR_FEATURE mandado por controlTransfer só zera o data toggle do dispositivo; o do Android
+        // continua onde estava (o USBDEVFS_CLEAR_HALT, que zera os dois, não tem API pública: o libaums usa
+        // JNI). Num endpoint que não tinha travado isso dessincroniza o toggle e o próximo pacote some.
+        // O SET_INTERFACE zera os dois lados (e, se o dispositivo recusar, o kernel faz o clear halt de
+        // verdade em cada endpoint).
+        conn.setInterface(intf)
     }
 
     override fun close() {
@@ -204,7 +275,12 @@ class UsbMassStorage private constructor(
     companion object {
         private const val TIMEOUT_MS = 5000
         private const val CHUNK = 16 * 1024
-        private const val MAX_BLOCKS_PER_CMD = 128
+
+        /** 64 KiB por comando, qualquer que seja o setor (o Linux usa 120 KiB nos dispositivos USB 2.0). */
+        private const val MAX_BYTES_PER_CMD = 64 * 1024
+
+        /** Disco (0x00) e disco RBC (0x0E). */
+        private val TIPOS_DISCO = setOf(0x00, 0x0E)
 
         private fun cdb(op: Int, size: Int = 6) = ByteArray(size).also { it[0] = op.toByte() }
 
