@@ -6,3 +6,4 @@ local.properties
 .kotlin/
 /tools/
 *.img
+*.apk
