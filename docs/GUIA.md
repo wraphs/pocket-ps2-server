@@ -63,7 +63,7 @@ Velocidade típica do SMB no PS2: 1–2,5 MB/s. A maioria dos jogos roda bem; jo
 ## 3C. Neutrino/XEB+ pelo UDPBD (avançado)
 
 - Modo **Pasta**: o PS2 enxerga a pasta como um disco exFAT (virtual).
-- Modo **Pendrive/HD inteiro**: o app lê o pendrive direto pelo USB (bloco a bloco, sem depender da montagem do Android). Enquanto o servidor roda, o Android deixa de mostrar o pendrive; depois de parar, desconecte e reconecte.
+- Modo **Pendrive/HD inteiro**: o app lê o pendrive direto pelo USB (bloco a bloco, sem depender da montagem do Android). Antes de iniciar, ejete o pendrive em Configurações › Manutenção › Armazenamento; ele continua listado no app. Enquanto o servidor roda, o Android não o enxerga; depois de parar, desconecte e reconecte. Se o pendrive for desconectado no meio, o servidor para sozinho.
 - Em `config/bsd-udpbd.toml` do Neutrino, troque o IP: `args = ["ip=192.168.42.200"]`. Exemplo direto: `neutrino.elf -bsd=udpbd -dvd=udpbd:DVD/Jogo.iso`.
 
 ## Problemas comuns

@@ -201,7 +201,7 @@ class MainActivity : Activity() {
         raiz.addView(painelPasta)
 
         painelUsb = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        painelUsb.addView(texto("O pendrive precisa estar no mesmo hub. Enquanto o servidor roda, o Android deixa de enxergá-lo (desconecte e reconecte depois de parar)."))
+        painelUsb.addView(texto("O pendrive precisa estar no mesmo hub. Antes de iniciar, ejete-o em Configurações › Manutenção › Armazenamento (ele continua aparecendo aqui). Enquanto o servidor roda, o Android não o enxerga; depois de parar, desconecte e reconecte."))
         listaUsb = RadioGroup(this).also { painelUsb.addView(it) }
         listaUsb.setOnCheckedChangeListener { g, id ->
             g.findViewById<RadioButton>(id)?.tag?.let { prefs.edit().putString("usb", it as String).apply() }
@@ -441,7 +441,7 @@ class MainActivity : Activity() {
         try {
             startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:$packageName")))
         } catch (e: Exception) {
-            startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+            try { startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)) } catch (_: Exception) { aviso("Abra Configurações › Apps › PS2 Ponte › Permissões") }
         }
     }
 
@@ -449,7 +449,7 @@ class MainActivity : Activity() {
         try {
             startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
         } catch (e: Exception) {
-            startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            try { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) } catch (_: Exception) { aviso("Abra Configurações › Apps › PS2 Ponte › Bateria › Sem restrições") }
         }
     }
 

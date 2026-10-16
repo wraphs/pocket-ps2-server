@@ -5,10 +5,14 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
+import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
+import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -41,6 +45,10 @@ class ServidorService : Service() {
      */
     private var sessao = 0
 
+    /** Thread que fecha os servidores do último Parar (o SMB espera até 2 s; o USB pode esperar timeouts). */
+    @Volatile private var fechando: Thread? = null
+    private var receptorDesconexao: BroadcastReceiver? = null
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -62,6 +70,7 @@ class ServidorService : Service() {
                 val pasta = intent.getStringExtra(EXTRA_PASTA).orEmpty()
                 val usb = intent.getStringExtra(EXTRA_USB).orEmpty()
                 val minha = synchronized(trava) { ++sessao }
+                if (modo == MODO_USB) vigiarDesconexao(usb)
                 Thread({ iniciar(minha, modo, pasta, usb) }, "ps2ponte-inicio").start()
             }
         }
@@ -81,6 +90,7 @@ class ServidorService : Service() {
         val log = Estado.eventLog
         val stats = Estado.stats
         try {
+            fechando?.join(5000) // espera o Parar anterior soltar as portas e o pendrive
             val novos = mutableListOf<PonteServer>()
             if (modo == MODO_PASTA) {
                 val raiz = File(pasta)
@@ -157,8 +167,15 @@ class ServidorService : Service() {
             dev = dispositivo
             dispositivo = null
         }
-        for (s in parados) try { s.close() } catch (_: Exception) {}
-        try { dev?.close() } catch (_: Exception) {}
+        receptorDesconexao?.let { try { unregisterReceiver(it) } catch (_: Exception) {} }
+        receptorDesconexao = null
+        if (parados.isNotEmpty() || dev != null) {
+            // Fora da thread principal: fechar pode levar alguns segundos e travaria a tela
+            fechando = Thread({
+                for (s in parados) try { s.close() } catch (_: Exception) {}
+                try { dev?.close() } catch (_: Exception) {}
+            }, "ps2ponte-parar").apply { start() }
+        }
         wakeLock?.let { if (it.isHeld) it.release() }
         wakeLock = null
         if (Estado.rodando) Estado.log("Servidor parado")
@@ -171,6 +188,23 @@ class ServidorService : Service() {
     override fun onDestroy() {
         encerrar()
         super.onDestroy()
+    }
+
+    /** No modo pendrive, para o servidor se o pendrive for desconectado (em vez de encher o log de erros). */
+    private fun vigiarDesconexao(nome: String) {
+        val r = object : BroadcastReceiver() {
+            override fun onReceive(c: Context, i: Intent) {
+                val d: UsbDevice? = if (Build.VERSION.SDK_INT >= 33) i.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+                else @Suppress("DEPRECATION") i.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+                if (d?.deviceName == nome && Estado.rodando) {
+                    Estado.log("Pendrive desconectado")
+                    encerrar()
+                    stopSelf()
+                }
+            }
+        }
+        registerReceiver(r, IntentFilter(UsbManager.ACTION_USB_DEVICE_DETACHED), Context.RECEIVER_EXPORTED)
+        receptorDesconexao = r
     }
 
     private fun criarCanal() {
