@@ -38,6 +38,7 @@ class ReplyRouter(private val interfaces: () -> List<Subnet> = ::localSubnets) {
     /** Destinos para a resposta: o próprio PS2, ou os broadcasts das interfaces cabeadas. */
     fun targets(peer: InetSocketAddress): List<InetSocketAddress> {
         val ip = peer.address as? Inet4Address ?: return listOf(peer)
+        if (ip.isLoopbackAddress) return listOf(peer)
         val nets = subnets()
         if (nets.isEmpty() || nets.any { it.contains(ip) }) return listOf(peer)
         val wired = nets.filter { isWired(it.ifName) && it.broadcast != null }

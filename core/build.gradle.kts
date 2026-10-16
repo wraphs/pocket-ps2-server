@@ -25,7 +25,8 @@ tasks.test {
 }
 
 // Sobe um main qualquer do core para testes de integração (ex.: clientes Python).
-// .\g.ps1 :core:runMain -PmainClass=br.ps2ponte.core.smb.SmbDevMainKt --args="C:\pasta 1445"
+// .\g.ps1 :core:runMain "-PmainClass=br.ps2ponte.core.smb.SmbDevMainKt" "--args=C:\pasta 1445"
+// (no PowerShell as aspas são obrigatórias: sem elas o argumento com "-" e "." é quebrado em dois)
 tasks.register<JavaExec>("runMain") {
     classpath = sourceSets["main"].runtimeClasspath + sourceSets["test"].runtimeClasspath
     mainClass.set(providers.gradleProperty("mainClass"))
