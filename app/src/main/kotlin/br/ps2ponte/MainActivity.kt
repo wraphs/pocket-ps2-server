@@ -73,21 +73,22 @@ class MainActivity : Activity() {
         }
     }
 
-    private val receptorUsb = object : BroadcastReceiver() {
+    /** Resposta do pedido de permissão USB (só o próprio app manda: não exportado). */
+    private val receptorPermissao = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            when (intent.action) {
-                ACAO_PERMISSAO_USB -> {
-                    val dev: UsbDevice? = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
-                    else @Suppress("DEPRECATION") intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
-                    if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false) && dev != null) {
-                        ServidorService.iniciar(this@MainActivity, ServidorService.MODO_USB, null, dev.deviceName)
-                    } else {
-                        aviso("Sem permissão para usar o pendrive")
-                    }
-                }
-                else -> atualizarUsb()
+            val dev: UsbDevice? = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+            else @Suppress("DEPRECATION") intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+            if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false) && dev != null) {
+                ServidorService.iniciar(this@MainActivity, ServidorService.MODO_USB, null, dev.deviceName)
+            } else {
+                aviso("Sem permissão para usar o pendrive")
             }
         }
+    }
+
+    /** Pendrive conectado/desconectado (aviso do sistema). */
+    private val receptorUsb = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) = atualizarUsb()
     }
 
     // ------------------------------------------------------------------ ciclo de vida
@@ -99,13 +100,13 @@ class MainActivity : Activity() {
         setContentView(montarTela())
         title = getString(R.string.app_name)
 
+        // RECEIVER_* são constantes: em Android < 13 o sistema simplesmente ignora a flag
+        registerReceiver(receptorPermissao, IntentFilter(ACAO_PERMISSAO_USB), Context.RECEIVER_NOT_EXPORTED)
         val filtro = IntentFilter().apply {
-            addAction(ACAO_PERMISSAO_USB)
             addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
             addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
         }
-        if (Build.VERSION.SDK_INT >= 33) registerReceiver(receptorUsb, filtro, Context.RECEIVER_EXPORTED)
-        else registerReceiver(receptorUsb, filtro)
+        registerReceiver(receptorUsb, filtro, Context.RECEIVER_EXPORTED)
 
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
@@ -129,6 +130,7 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         Estado.esquecer(ouvinte)
+        unregisterReceiver(receptorPermissao)
         unregisterReceiver(receptorUsb)
         super.onDestroy()
     }

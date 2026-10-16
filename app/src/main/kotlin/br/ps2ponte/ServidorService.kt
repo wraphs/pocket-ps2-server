@@ -43,7 +43,7 @@ class ServidorService : Service() {
                 criarCanal()
                 startForeground(1, notificacao("Iniciando..."), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
                 wakeLock = (getSystemService(Context.POWER_SERVICE) as PowerManager)
-                    .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ps2ponte:servidor").apply { acquire() }
+                    .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ps2ponte:servidor").apply { acquire(24 * 60 * 60 * 1000L) }
                 Estado.rodando = true
                 Estado.resumo = "Iniciando..."
                 Estado.avisar()
