@@ -40,10 +40,14 @@ class ReplyRouter(private val interfaces: () -> List<Subnet> = ::localSubnets) {
         val ip = peer.address as? Inet4Address ?: return listOf(peer)
         if (ip.isLoopbackAddress) return listOf(peer)
         val nets = subnets()
-        if (nets.isEmpty() || nets.any { it.contains(ip) }) return listOf(peer)
+        if (nets.isEmpty() || nets.any { isWired(it.ifName) && it.contains(ip) }) return listOf(peer)
         val wired = nets.filter { isWired(it.ifName) && it.broadcast != null }
         if (wired.isEmpty()) return listOf(peer)
-        return wired.map { InetSocketAddress(it.broadcast, peer.port) }
+        val broadcasts = wired.map { InetSocketAddress(it.broadcast, peer.port) }
+        // IP dentro da sub-rede de outra interface (ex.: Wi-Fi de casa em 192.168.1.x e o PS2 no cabo com o
+        // IP padrão 192.168.1.10): o unicast sairia pelo Wi-Fi. Sem saber por onde o pacote chegou, responde
+        // pelos dois caminhos; só um deles chega ao PS2.
+        return if (nets.any { it.contains(ip) }) listOf(peer) + broadcasts else broadcasts
     }
 
     companion object {
