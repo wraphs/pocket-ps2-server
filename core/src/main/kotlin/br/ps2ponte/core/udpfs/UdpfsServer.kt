@@ -6,10 +6,10 @@ import br.ps2ponte.core.PonteServer
 import br.ps2ponte.core.TransferStats
 import br.ps2ponte.core.block.BlockDevice
 import br.ps2ponte.core.fs.LocalTree
+import br.ps2ponte.core.fs.VFile
+import br.ps2ponte.core.fs.VHandle
 import br.ps2ponte.core.net.ReplyRouter
-import java.io.File
 import java.io.IOException
-import java.io.RandomAccessFile
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetSocketAddress
@@ -49,8 +49,8 @@ class UdpfsServer(
     private var txBuffer = ArrayList<Pair<Int, ByteArray>>()
 
     private sealed class Handle {
-        class FileH(val raf: RandomAccessFile, val append: Boolean) : Handle()
-        class DirH(val entries: List<File>, var index: Int = 0) : Handle()
+        class FileH(val io: VHandle, val append: Boolean, var pos: Long = 0) : Handle()
+        class DirH(val entries: List<VFile>, var index: Int = 0) : Handle()
         class BlockH(var pos: Long = 0) : Handle()
     }
 
@@ -429,11 +429,11 @@ class UdpfsServer(
     private class Stat(val mode: Int, val size: Long, val time: ByteArray) {
         companion object {
             val EMPTY = Stat(0, 0, ByteArray(8))
-            fun of(f: File) = Stat(if (f.isDirectory) FIO_S_IFDIR else FIO_S_IFREG, if (f.isDirectory) 0 else f.length(), encodeTime(f.lastModified()))
+            fun of(f: VFile) = Stat(if (f.isDirectory) FIO_S_IFDIR else FIO_S_IFREG, if (f.isDirectory) 0 else f.length(), encodeTime(f.lastModified()))
         }
     }
 
-    private fun resolve(path: String): File? = tree?.resolve(path)
+    private fun resolve(path: String): VFile? = tree?.resolve(path)
 
     private fun allocHandle(h: Handle): Int = synchronized(handles) {
         if (handles.size >= MAX_HANDLES) return -EMFILE
@@ -443,7 +443,7 @@ class UdpfsServer(
     }
 
     private fun closeHandle(h: Handle) {
-        if (h is Handle.FileH) try { h.raf.close() } catch (_: IOException) {}
+        if (h is Handle.FileH) try { h.io.close() } catch (_: IOException) {}
     }
 
     private fun handleOpen(d: DatagramSocket, addr: InetSocketAddress, p: ByteArray) {
@@ -469,12 +469,12 @@ class UdpfsServer(
         val append = flags and O_APPEND != 0
         try {
             if (creat) f.parentFile?.mkdirs()
-            val raf = RandomAccessFile(f, if (writable) "rw" else "r")
+            val io = f.open(writable)
             val doTrunc = (access == O_WRONLY && trunc && !append) || (access == O_RDWR && creat && trunc)
             val doAppend = (access == O_WRONLY && append) || (access == O_RDWR && creat && !trunc && append)
-            if (doTrunc) raf.setLength(0)
-            val id = allocHandle(Handle.FileH(raf, doAppend))
-            if (id < 0) raf.close()
+            if (doTrunc) io.setLength(0)
+            val id = allocHandle(Handle.FileH(io, doAppend))
+            if (id < 0) io.close()
             log.log("UDPFS: abriu $path (${f.length() / (1024 * 1024)} MiB)")
             sendOpenReply(d, addr, id, if (id >= 0) Stat.of(f) else null)
         } catch (e: IOException) {
@@ -501,12 +501,8 @@ class UdpfsServer(
             when (h) {
                 is Handle.FileH -> {
                     val buf = ByteArray(size)
-                    var n = 0
-                    while (n < size) {
-                        val r = h.raf.read(buf, n, size - n)
-                        if (r <= 0) break
-                        n += r
-                    }
+                    val n = h.io.readFully(h.pos, buf, 0, size)
+                    h.pos += n
                     stats.bytesRead.addAndGet(n.toLong())
                     sendReadResult(d, addr, n, buf, n)
                 }
@@ -570,8 +566,9 @@ class UdpfsServer(
         val h = synchronized(handles) { handles[wHandle] } as? Handle.FileH ?: return sendData(d, addr, reply8(WRITE_DONE, -EBADF))
         try {
             val bytes = wData.toByteArray()
-            if (h.append) h.raf.seek(h.raf.length())
-            h.raf.write(bytes)
+            if (h.append) h.pos = h.io.length()
+            h.io.write(h.pos, bytes, 0, bytes.size)
+            h.pos += bytes.size
             stats.bytesWritten.addAndGet(bytes.size.toLong())
             sendData(d, addr, reply8(WRITE_DONE, bytes.size))
         } catch (e: IOException) {
@@ -595,8 +592,7 @@ class UdpfsServer(
                 }
                 is Handle.FileH -> {
                     val expected = wSectorCount * 512
-                    h.raf.seek(wSector * 512)
-                    h.raf.write(bytes, 0, minOf(expected, bytes.size))
+                    h.io.write(wSector * 512, bytes, 0, minOf(expected, bytes.size))
                     stats.bytesWritten.addAndGet(expected.toLong())
                 }
                 else -> return sendData(d, addr, reply8(WRITE_DONE, -EBADF))
@@ -617,10 +613,10 @@ class UdpfsServer(
         try {
             when (h) {
                 is Handle.FileH -> {
-                    val base = when (whence) { 0 -> 0L; 1 -> h.raf.filePointer; 2 -> h.raf.length(); else -> return sendLseekReply(d, addr, -EINVAL.toLong()) }
+                    val base = when (whence) { 0 -> 0L; 1 -> h.pos; 2 -> h.io.length(); else -> return sendLseekReply(d, addr, -EINVAL.toLong()) }
                     val np = base + offset
                     if (np < 0) return sendLseekReply(d, addr, -EINVAL.toLong())
-                    h.raf.seek(np)
+                    h.pos = np
                     sendLseekReply(d, addr, np)
                 }
                 is Handle.BlockH -> {
@@ -690,7 +686,7 @@ class UdpfsServer(
         val r = when {
             !f.exists() -> -ENOENT
             !f.isDirectory -> -ENOTDIR
-            (f.list()?.isNotEmpty() == true) -> -ENOTEMPTY
+            (f.listFiles()?.isNotEmpty() == true) -> -ENOTEMPTY
             f.delete() -> 0
             else -> -EIO
         }
@@ -716,13 +712,7 @@ class UdpfsServer(
                 is Handle.FileH -> {
                     val total = count * 512
                     val buf = ByteArray(total)
-                    h.raf.seek(sector * 512)
-                    var n = 0
-                    while (n < total) {
-                        val r = h.raf.read(buf, n, total - n)
-                        if (r <= 0) break
-                        n += r
-                    }
+                    val n = h.io.readFully(sector * 512, buf, 0, total)
                     stats.bytesRead.addAndGet(n.toLong())
                     sendReadResult(d, addr, n, buf, n)
                 }

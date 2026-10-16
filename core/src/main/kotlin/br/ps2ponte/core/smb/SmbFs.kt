@@ -9,12 +9,12 @@ import java.io.File
  * troca todo caractere não-ASCII do nome listado por '?' e depois pede o arquivo com esse nome.
  */
 internal class SmbPaths(private val tree: LocalTree) {
-    val root: File get() = tree.root
+    @Suppress("DEPRECATION") val root: File get() = tree.rootFile
     val readOnly: Boolean get() = tree.readOnly
 
     /** null = caminho fora da raiz. */
     fun resolve(path: String): File? {
-        val f = tree.resolve(path) ?: return null
+        @Suppress("DEPRECATION") val f = tree.resolveFile(path) ?: return null
         if (f.exists() || '?' !in path) return f
         return fuzzy(path) ?: f
     }
