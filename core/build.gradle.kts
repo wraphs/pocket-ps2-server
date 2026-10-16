@@ -23,3 +23,11 @@ tasks.test {
     useJUnitPlatform()
     testLogging { events("failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
 }
+
+// Sobe um main qualquer do core para testes de integração (ex.: clientes Python).
+// .\g.ps1 :core:runMain -PmainClass=br.ps2ponte.core.smb.SmbDevMainKt --args="C:\pasta 1445"
+tasks.register<JavaExec>("runMain") {
+    classpath = sourceSets["main"].runtimeClasspath + sourceSets["test"].runtimeClasspath
+    mainClass.set(providers.gradleProperty("mainClass"))
+    standardInput = System.`in`
+}
