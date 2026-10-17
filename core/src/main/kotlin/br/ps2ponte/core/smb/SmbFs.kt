@@ -1,29 +1,29 @@
 package br.ps2ponte.core.smb
 
 import br.ps2ponte.core.fs.LocalTree
-import java.io.File
+import br.ps2ponte.core.fs.VFile
 
 /**
- * Resolução de caminhos para o SMB. Usa [LocalTree.resolve] (barras e maiúsculas) e, se o arquivo
- * não existir e o caminho tiver '?', casa '?' com qualquer caractere: com Unicode ligado o PS2
+ * Resolução de caminhos para o SMB. Usa [LocalTree.resolve] (barras e maiúsculas) e, se o caminho
+ * tiver '?' e o item não existir, casa '?' com qualquer caractere: com Unicode ligado o PS2
  * troca todo caractere não-ASCII do nome listado por '?' e depois pede o arquivo com esse nome.
  */
 internal class SmbPaths(private val tree: LocalTree) {
-    @Suppress("DEPRECATION") val root: File get() = tree.rootFile
+    val root: VFile get() = tree.root
     val readOnly: Boolean get() = tree.readOnly
 
     /** null = caminho fora da raiz. */
-    fun resolve(path: String): File? {
-        @Suppress("DEPRECATION") val f = tree.resolveFile(path) ?: return null
-        if (f.exists() || '?' !in path) return f
+    fun resolve(path: String): VFile? {
+        val f = tree.resolve(path) ?: return null
+        if ('?' !in path || f.exists()) return f  // sem '?' não gasta um exists() a mais (no SAF é IPC)
         return fuzzy(path) ?: f
     }
 
-    private fun fuzzy(path: String): File? {
+    private fun fuzzy(path: String): VFile? {
         val parts = path.replace('\\', '/').split('/').filter { it.isNotEmpty() && it != "." }
         var cur = root
         for (part in parts) {
-            val exact = File(cur, part)
+            val exact = cur.child(part)
             if (exact.exists()) {
                 cur = exact
                 continue
@@ -77,7 +77,7 @@ internal fun wildMatch(pattern: String, name: String): Boolean {
 }
 
 /** Entrada de uma busca ("." e ".." apontam para a pasta e a mãe). */
-internal class DirEntry(val name: String, val file: File)
+internal class DirEntry(val name: String, val file: VFile)
 
 /** Busca aberta por FIND_FIRST2: fotografia da pasta, entregue aos poucos. */
 internal class Search(val sid: Int, val tid: Int, val entries: List<DirEntry>) {
@@ -85,19 +85,19 @@ internal class Search(val sid: Int, val tid: Int, val entries: List<DirEntry>) {
 }
 
 /** Lista [dir] filtrando por [mask]; "." e ".." primeiro, depois em ordem alfabética. */
-internal fun listDir(dir: File, root: File, mask: String, includeDirs: Boolean): List<DirEntry> {
+internal fun listDir(dir: VFile, mask: String, includeDirs: Boolean): List<DirEntry> {
     val out = ArrayList<DirEntry>()
     if (hasWildcards(mask)) {
         if (includeDirs) {
             if (wildMatch(mask, ".")) out += DirEntry(".", dir)
-            if (wildMatch(mask, "..")) out += DirEntry("..", if (dir == root) dir else dir.parentFile ?: dir)
+            if (wildMatch(mask, "..")) out += DirEntry("..", dir.parentFile ?: dir)  // na raiz, a própria raiz
         }
         val children = dir.listFiles() ?: return out
-        children.filter { (includeDirs || !it.isDirectory) && wildMatch(mask, it.name) }
+        children.filter { wildMatch(mask, it.name) && (includeDirs || !it.isDirectory) }
             .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
             .forEach { out += DirEntry(it.name, it) }
     } else {
-        val exact = File(dir, mask)
+        val exact = dir.child(mask)
         val f = if (exact.exists()) exact else dir.listFiles()?.firstOrNull { it.name.equals(mask, ignoreCase = true) }
         if (f != null && (includeDirs || !f.isDirectory)) out += DirEntry(f.name, f)
     }
@@ -105,8 +105,8 @@ internal fun listDir(dir: File, root: File, mask: String, includeDirs: Boolean):
 }
 
 /** Atributos estendidos (32 bits) e SMB (16 bits): pasta, arquivo, somente leitura. */
-internal fun attrsOf(f: File, readOnly: Boolean): Int = when {
-    f.isDirectory -> 0x10
+internal fun attrsOf(isDir: Boolean, readOnly: Boolean): Int = when {
+    isDir -> 0x10
     readOnly -> 0x21
     else -> 0x20
 }
@@ -128,6 +128,7 @@ internal fun findHeaderSize(level: Int): Int = when (level) {
 /**
  * Escreve uma entrada de busca. NextEntryOffset fica 0 (quem chama ajusta).
  * FileNameLength não conta o terminador, que vai em seguida (o PS2 aceita os dois jeitos).
+ * Cada metadado é lido uma vez só (no SAF cada chamada pode ser IPC).
  */
 internal fun writeFindEntry(o: Out, level: Int, e: DirEntry, name: ByteArray, unicode: Boolean, readOnly: Boolean) {
     o.u32(0)  // NextEntryOffset
@@ -142,7 +143,7 @@ internal fun writeFindEntry(o: Out, level: Int, e: DirEntry, name: ByteArray, un
         o.u64(t); o.u64(t); o.u64(t); o.u64(t)  // criação, acesso, escrita, mudança
         o.u64(size)
         o.u64(allocOf(size))
-        o.u32(attrsOf(f, readOnly))
+        o.u32(attrsOf(dir, readOnly))
         o.u32(name.size)
         if (level != 0x101) o.u32(0)  // EaSize
         when (level) {
@@ -161,4 +162,5 @@ internal fun writeFindEntry(o: Out, level: Int, e: DirEntry, name: ByteArray, un
     if (unicode) o.u16(0) else o.u8(0)
 }
 
-internal fun fileId(f: File): Long = (f.absolutePath.hashCode().toLong() and 0xFFFFFFFFL) or 0x1_0000_0000L
+/** FileId estável derivado de [VFile.path] (a identidade do item). */
+internal fun fileId(f: VFile): Long = (f.path.hashCode().toLong() and 0xFFFFFFFFL) or 0x1_0000_0000L
