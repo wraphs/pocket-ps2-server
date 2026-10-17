@@ -8,7 +8,7 @@ Pré-requisitos: PS2 desbloqueado que roda ELFs (FMCB, PS2BBL, FreeDVDBoot… co
 ## 1. Instalar e preparar o app
 
 1. Copie o `PS2Ponte.apk` para o celular e instale (permita "instalar apps desconhecidos").
-2. Abra e toque em **Permitir acesso a todos os arquivos** e em **Não deixar a bateria parar o servidor**. Aceite as notificações.
+2. Abra e toque em **Não deixar a bateria parar o servidor**. Aceite as notificações. **Permitir acesso a todos os arquivos** só é preciso se os jogos estiverem na memória interna do celular.
 3. Ligue o hub e o cabo no PS2. Toque em **Abrir Ancoragem** e ligue **Ancoragem Ethernet** (Configurações › Conexões › Roteador Wi-Fi e ancoragem). O celular passa a distribuir IP pelo cabo.
 4. A seção **1. Rede** mostra o IP do celular (ex.: `192.168.42.129`) e o IP sugerido para o PS2 (ex.: `192.168.42.200`). Esses dois números são usados abaixo.
 
@@ -24,7 +24,9 @@ ART/  CFG/  CHT/  VMC/  THM/  LNG/  APPS/  POPS/
 
 O app tem o botão **Criar as pastas do OPL aqui**. No OPL 0.9.x o nome precisa ser `SLUS_123.45.Nome do Jogo.iso`; do 1.0 em diante qualquer nome serve.
 
-No app: **3. O que servir** › **Uma pasta** › "Usar a raiz de: (pendrive)" ou "Escolher outra pasta…" › **Iniciar servidor**.
+No app: **3. O que servir** › **Uma pasta** › **Usar a raiz de: (seu pendrive)**. O Android abre o seletor de pastas já na raiz do pendrive: toque em **Usar esta pasta** e depois em **Permitir**. O acesso fica salvo; só precisa repetir se reinstalar o app. Depois, **Iniciar servidor**.
+O pendrive pode estar em exFAT, FAT32 ou NTFS: o PS2 nunca lê o pendrive direto nesse modo.
+O Android não deixa nenhum app abrir pendrive USB por caminho (`/storage/...`), por isso o seletor é obrigatório.
 No modo Pasta ficam ligados os três protocolos ao mesmo tempo: SMB1 (TCP 1445), UDPFS (UDP 62966) e UDPBD (UDP 48573, com um disco exFAT virtual da pasta).
 
 ## 3A. OPL pelo SMB — o mais simples (qualquer versão)

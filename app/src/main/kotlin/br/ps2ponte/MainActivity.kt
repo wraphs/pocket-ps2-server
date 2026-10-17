@@ -272,7 +272,7 @@ class MainActivity : Activity() {
         btnArquivos.visibility = if (arquivos) View.GONE else View.VISIBLE
         btnBateria.visibility = if (bateria) View.GONE else View.VISIBLE
         tvPerm.text = buildString {
-            append(if (arquivos) "✔ Acesso a todos os arquivos" else "⚠ Falta o acesso a todos os arquivos (necessário para o modo Pasta)")
+            append(if (arquivos) "✔ Acesso a todos os arquivos" else "⚠ Falta o acesso a todos os arquivos (só necessário para pastas da memória interna)")
             append("\n")
             append(if (bateria) "✔ Bateria sem restrição" else "⚠ A economia de bateria pode derrubar o servidor com a tela apagada")
         }
@@ -283,8 +283,19 @@ class MainActivity : Activity() {
         val sm = getSystemService(StorageManager::class.java)
         for (v in sm.storageVolumes) {
             if (v.state != Environment.MEDIA_MOUNTED) continue
-            val dir = caminhoAcessivel(v) ?: continue
-            listaVolumes.addView(botao("Usar a raiz de: ${v.getDescription(this)}\n$dir") { definirPasta(dir) })
+            if (v.isPrimary) {
+                val dir = caminhoAcessivel(v) ?: continue
+                listaVolumes.addView(botao("Usar a raiz de: ${v.getDescription(this)}\n$dir") { definirPasta(dir) })
+            } else {
+                // Pendrive USB: o Android só libera pelo seletor. Ele abre já na raiz; é só tocar em "Usar esta pasta".
+                listaVolumes.addView(botao("Usar a raiz de: ${v.getDescription(this)} (pendrive)\nno seletor, toque em \"Usar esta pasta\"") {
+                    try {
+                        startActivityForResult(v.createOpenDocumentTreeIntent(), REQ_PASTA)
+                    } catch (e: Exception) {
+                        escolherPasta()
+                    }
+                })
+            }
         }
         mostrarPasta()
     }
@@ -311,15 +322,19 @@ class MainActivity : Activity() {
             btnCriarPastas.visibility = View.GONE
             return
         }
-        val f = File(pasta)
-        val temOpl = listOf("DVD", "CD").any { nome -> f.listFiles()?.any { it.isDirectory && it.name.equals(nome, true) } == true }
-        tvPasta.text = "Pasta: $pasta\n" + when {
-            !Environment.isExternalStorageManager() -> "⚠ dê a permissão de arquivos para o app enxergar a pasta"
-            !f.isDirectory -> "⚠ pasta não encontrada (o pendrive foi desconectado?)"
+        val saf = Fonte.ehSaf(pasta)
+        val acesso = if (saf) Fonte.temPermissao(this, pasta) else Environment.isExternalStorageManager()
+        val raiz = if (acesso) Fonte.raiz(this, pasta) else null
+        val filhos = raiz?.listFiles()
+        val temOpl = listOf("DVD", "CD").any { nome -> filhos?.any { it.isDirectory && it.name.equals(nome, true) } == true }
+        tvPasta.text = "Pasta: ${Fonte.descricao(this, pasta)}\n" + when {
+            !acesso && saf -> "⚠ o acesso ao pendrive foi perdido: toque de novo em \"Usar a raiz de…\""
+            !acesso -> "⚠ dê a permissão de arquivos para o app enxergar a pasta"
+            filhos == null -> "⚠ não consegui abrir: toque de novo em \"Usar a raiz de…\" (o pendrive foi desconectado?)"
             temOpl -> "✔ tem as pastas do OPL (DVD/CD)"
             else -> "⚠ não achei as pastas DVD/ ou CD/ aqui"
         }
-        btnCriarPastas.visibility = if (f.isDirectory && !temOpl && Environment.isExternalStorageManager()) View.VISIBLE else View.GONE
+        btnCriarPastas.visibility = if (filhos != null && !temOpl) View.VISIBLE else View.GONE
     }
 
     private fun atualizarUsb() {
@@ -369,13 +384,15 @@ class MainActivity : Activity() {
             return
         }
         if (rbPasta.isChecked) {
-            if (!Environment.isExternalStorageManager()) {
+            val pasta = pastaSalva() ?: return aviso("Escolha uma pasta")
+            if (Fonte.ehSaf(pasta)) {
+                if (!Fonte.temPermissao(this, pasta)) return aviso("Toque de novo em \"Usar a raiz de…\" para liberar o pendrive")
+            } else if (!Environment.isExternalStorageManager()) {
                 aviso("Permita o acesso a todos os arquivos primeiro")
                 abrirPermissaoArquivos()
                 return
             }
-            val pasta = pastaSalva() ?: return aviso("Escolha uma pasta")
-            if (!File(pasta).isDirectory) return aviso("Pasta não encontrada: $pasta")
+            if (Fonte.raiz(this, pasta).listFiles() == null) return aviso("Não consegui abrir a pasta: ${Fonte.descricao(this, pasta)}")
             ServidorService.iniciar(this, ServidorService.MODO_PASTA, pasta, null)
         } else {
             val nome = listaUsb.findViewById<RadioButton>(listaUsb.checkedRadioButtonId)?.tag as? String
@@ -397,7 +414,8 @@ class MainActivity : Activity() {
 
     private fun criarPastasOpl() {
         val pasta = pastaSalva() ?: return
-        for (nome in listOf("DVD", "CD", "ART", "CFG", "CHT", "LNG", "THM", "VMC", "POPS", "APPS")) File(pasta, nome).mkdirs()
+        val raiz = Fonte.raiz(this, pasta)
+        for (nome in listOf("DVD", "CD", "ART", "CFG", "CHT", "LNG", "THM", "VMC", "POPS", "APPS")) raiz.child(nome).mkdirs()
         mostrarPasta()
         aviso("Pastas criadas. Coloque os .iso em DVD (ou CD)")
     }
@@ -415,8 +433,20 @@ class MainActivity : Activity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode != REQ_PASTA || resultCode != RESULT_OK) return
         val uri = data?.data ?: return
-        val caminho = caminhoDaArvore(uri) ?: return aviso("Essa pasta não é do armazenamento do celular/pendrive")
-        definirPasta(caminho)
+        if (uri.authority != "com.android.externalstorage.documents") return aviso("Essa pasta não é do armazenamento do celular/pendrive")
+        val vol = DocumentsContract.getTreeDocumentId(uri).substringBefore(':')
+        if (vol.equals("primary", true) || vol.equals("home", true)) {
+            // Memória interna: por caminho (mais rápido; usa o "acesso a todos os arquivos")
+            caminhoDaArvore(uri)?.let { definirPasta(it) }
+        } else {
+            // Pendrive: guarda a árvore do SAF com permissão permanente de leitura e gravação
+            try {
+                contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            } catch (e: SecurityException) {
+                return aviso("O Android não liberou o acesso permanente a essa pasta")
+            }
+            definirPasta(uri.toString())
+        }
     }
 
     /** "primary:PS2" -> /storage/emulated/0/PS2 ; "1234-ABCD:PS2" -> /storage/1234-ABCD/PS2 ; "home:PS2" -> .../Documents/PS2 */

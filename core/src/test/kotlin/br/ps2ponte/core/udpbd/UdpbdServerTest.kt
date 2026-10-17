@@ -42,7 +42,8 @@ class UdpbdServerTest {
         device = FileBlockDevice(img)
         server = UdpbdServer(device, port = port, stats = stats, router = ReplyRouter { emptyList() })
         server.start()
-        client = DatagramSocket(InetSocketAddress(InetAddress.getLoopbackAddress(), 0)).apply { soTimeout = 2000 }
+        // Buffer grande: o servidor manda até 183 pacotes em rajada (sem controle de fluxo, como o original)
+        client = DatagramSocket(InetSocketAddress(InetAddress.getLoopbackAddress(), 0)).apply { soTimeout = 2000; receiveBufferSize = 4 shl 20 }
     }
 
     @AfterEach

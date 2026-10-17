@@ -28,7 +28,6 @@ import br.ps2ponte.core.udpbd.UdpbdServer
 import br.ps2ponte.core.udpfs.UdpfsServer
 import br.ps2ponte.usb.UsbMassStorage
 import java.io.Closeable
-import java.io.File
 
 /** Serviço em primeiro plano que mantém os servidores rodando com a tela apagada. */
 class ServidorService : Service() {
@@ -94,10 +93,11 @@ class ServidorService : Service() {
             fechando?.join(5000) // espera o Parar anterior soltar as portas e o pendrive
             val novos = mutableListOf<PonteServer>()
             if (modo == MODO_PASTA) {
-                val raiz = File(pasta)
-                if (!raiz.isDirectory) throw IllegalStateException("pasta não encontrada: $pasta")
+                val raiz = Fonte.raiz(this, pasta)
+                val nome = Fonte.descricao(this, pasta)
+                if (!raiz.isDirectory) throw IllegalStateException("pasta não encontrada: $nome")
                 val tree = LocalTree(raiz)
-                log.log("Pasta: $pasta")
+                log.log("Pasta: $nome")
                 novos += SmbServer(tree, port = PORTA_SMB, shareName = "PS2SMB", log = log, stats = stats)
                 log.log("Montando o disco exFAT virtual (para UDPBD)...")
                 val exfat = VirtualExFat.build(raiz, log)
