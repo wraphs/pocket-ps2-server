@@ -108,7 +108,12 @@ class VirtualExFatTest {
     @Test
     fun entradasConferemComAPasta() {
         val root = tree()
-        VirtualExFat.build(root, log, freeBytes = 64L shl 20).use { dev ->
+        VirtualExFat.build(root, log, freeBytes = 64L shl 20).use { dev -> checkAgainstSource(dev, root) }
+    }
+
+    /** Entradas, ordem, somas, hashes e conteúdo do disco conferidos com a pasta de origem. */
+    private fun checkAgainstSource(dev: VirtualExFat, root: File) {
+        run {
             val rd = ExFatTestReader(dev)
             val found = LinkedHashMap<String, ExFatTestReader.Entry>()
             fun visit(first: Int, rel: String) {
@@ -160,6 +165,32 @@ class VirtualExFatTest {
             val up = sp.getValue(ExFat.ET_UPCASE)
             assertArrayEquals(UpCase.table, rd.bytes(up.first, up.second))
         }
+    }
+
+    @Test
+    fun arvoreQueNaoEJavaIoFile() {
+        // VFile como o do SAF: caminho "saf://...", atributos vindos da listagem, nada de java.io.File.
+        val root = tree()
+        val calls = SafLikeFile.Calls()
+        val saf = SafLikeFile.root(root, calls)
+        VirtualExFat.build(saf, log, freeBytes = 64L shl 20).use { dev ->
+            assertEquals(11, calls.listFiles.get(), "uma listagem por pasta (raiz + 10)")
+            assertEquals(0, calls.exists.get(), "sem exists() por arquivo")
+            assertEquals(0, calls.uncached.get() - calls.rootAttrs.get(), "só a raiz lê atributos fora da listagem")
+            assertEquals("46 arquivos, 10 pastas, 0,0 GiB", dev.describe())
+            checkAgainstSource(dev, root)
+            assertTrue(calls.opens.get() in 1..46)
+
+            // Gravação direta pelo VHandle do VFile.
+            val rd = ExFatTestReader(dev)
+            val vmc = rd.dir(rd.dir(rd.rootCluster).first { it.name == "VMC" }.firstCluster).first()
+            val data = bytes(512, 77)
+            dev.write(rd.clusterLba(vmc.firstCluster) + 2, 1, data, 0)
+            assertEquals(0, dev.overlaySectors)
+            assertArrayEquals(data, File(root, "VMC/slot0.bin").readBytes().copyOfRange(1024, 1536))
+            assertTrue(logs.any { it.startsWith("exFAT virtual: 46 arquivos") })
+        }
+        assertEquals(0, calls.openHandles.get(), "close() fecha os VHandle")
     }
 
     @Test

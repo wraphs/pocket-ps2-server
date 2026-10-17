@@ -7,6 +7,8 @@ import br.ps2ponte.core.exfat.ExFat.CLUSTER_BYTES
 import br.ps2ponte.core.exfat.ExFat.ENTRY
 import br.ps2ponte.core.exfat.ExFat.SECTOR
 import br.ps2ponte.core.exfat.ExFat.SECTORS_PER_CLUSTER
+import br.ps2ponte.core.fs.LocalFile
+import br.ps2ponte.core.fs.VFile
 import java.io.File
 import java.io.IOException
 import java.util.Arrays
@@ -95,8 +97,12 @@ class VirtualExFat private constructor(
         private const val K_DIR = 2
         private const val K_FILE = 3
 
+        /**
+         * Fotografa a árvore [root] (pasta local ou SAF) e monta o disco.
+         * [freeBytes]: espaço livre virtual; [overlayLimitBytes]: limite da camada de gravação em memória.
+         */
         fun build(
-            root: File,
+            root: VFile,
             log: EventLog = NoLog,
             freeBytes: Long = 4L shl 30,
             overlayLimitBytes: Long = 64L shl 20,
@@ -105,8 +111,7 @@ class VirtualExFat private constructor(
             val tz = TimeZone.getDefault()
             val snap = TreeSnapshot(root, log, tz)
             val lay = Layout.build(snap, freeBytes, log)
-            val real = try { root.canonicalPath } catch (e: IOException) { root.absolutePath }
-            val crc = CRC32().apply { update(real.toByteArray(Charsets.UTF_8)) }
+            val crc = CRC32().apply { update(root.path.toByteArray(Charsets.UTF_8)) }
             val serial = crc.value.toInt().let { if (it == 0) 0x50533221 else it }
             val dev = VirtualExFat(snap, lay, log, overlayLimitBytes, serial)
             val ms = (System.nanoTime() - t0) / 1_000_000
@@ -116,6 +121,14 @@ class VirtualExFat private constructor(
             )
             return dev
         }
+
+        /** Pasta local (java.io.File). */
+        fun build(
+            root: File,
+            log: EventLog = NoLog,
+            freeBytes: Long = 4L shl 30,
+            overlayLimitBytes: Long = 64L shl 20,
+        ): VirtualExFat = build(LocalFile.root(root), log, freeBytes, overlayLimitBytes)
 
         private val PT_BR: Locale = Locale.forLanguageTag("pt-BR")
         internal fun gib(bytes: Long) = String.format(PT_BR, "%.1f", bytes / (1024.0 * 1024 * 1024))
@@ -430,7 +443,7 @@ class VirtualExFat private constructor(
         if (lba < 0 || count < 0 || lba + count > sectorCount) throw IOException("setor fora do disco: $lba+$count")
     }
 
-    override fun flush() = handles.flush()
+    // flush(): nada a fazer; as gravações diretas já foram entregues ao VHandle (que não tem sync).
 
     override fun close() {
         closed = true
