@@ -34,6 +34,8 @@ def main():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     if hasattr(socket, 'SIO_UDP_CONNRESET'):
         s.ioctl(socket.SIO_UDP_CONNRESET, False)
+    # O servidor manda até 183 pacotes em rajada (sem controle de fluxo, como o original): buffer grande
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4 << 20)
     s.bind(('0.0.0.0', 0))
     s.settimeout(2)
     srv = (a.host, a.porta)

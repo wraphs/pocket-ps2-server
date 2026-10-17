@@ -25,10 +25,6 @@ class LocalTree(val root: VFile, val readOnly: Boolean = false) {
         return cur
     }
 
-    // Ponte temporária enquanto SMB e exFAT migram de java.io.File para VFile.
-    @Deprecated("usar root") val rootFile: File get() = (root as LocalFile).file
-    @Deprecated("usar resolve") fun resolveFile(path: String): File? = (resolve(path) as LocalFile?)?.file
-
     private fun findIgnoringCase(dir: VFile, name: String): VFile? =
         dir.listFiles()?.firstOrNull { it.name.equals(name, ignoreCase = true) }
 }
