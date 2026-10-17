@@ -81,7 +81,7 @@ private fun serve(root: File, port: Int, free: Long) {
 private fun measure(root: File) {
     repeat(5) {
         val t0 = System.nanoTime()
-        val snap = TreeSnapshot(root, { }, java.util.TimeZone.getDefault())
+        val snap = TreeSnapshot(br.ps2ponte.core.fs.LocalFile.root(root), { }, java.util.TimeZone.getDefault())
         val t1 = System.nanoTime()
         VirtualExFat.build(root).use { dev ->
             val t2 = System.nanoTime()

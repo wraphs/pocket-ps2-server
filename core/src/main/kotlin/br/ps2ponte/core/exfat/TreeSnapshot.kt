@@ -1,22 +1,17 @@
 package br.ps2ponte.core.exfat
 
 import br.ps2ponte.core.EventLog
-import java.io.File
+import br.ps2ponte.core.fs.VFile
 import java.io.IOException
-import java.nio.file.DirectoryStream
-import java.nio.file.Files
-import java.nio.file.LinkOption
-import java.nio.file.Path
-import java.nio.file.attribute.BasicFileAttributes
+import java.util.TimeZone
 import java.util.concurrent.Callable
-import java.util.concurrent.ExecutionException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 /** Um arquivo ou pasta da fotografia da árvore. */
 internal class Node(
     val name: String,
-    val file: File,
+    val file: VFile,
     val isDir: Boolean,
     val size: Long,
     /** Timestamp exFAT já convertido ([ExFat.timestamp]). */
@@ -47,122 +42,103 @@ internal class Node(
 }
 
 /**
- * Percorre a pasta uma vez (fotografia). Ordem determinística (nome sem diferenciar maiúsculas),
- * ignora o que não dá para ler, nomes inválidos para exFAT, nomes repetidos sem diferenciar
- * maiúsculas e laços de links simbólicos.
+ * Percorre a árvore uma vez (fotografia) só com [VFile.listFiles] e os atributos dos itens listados
+ * (no SAF a listagem de uma pasta é uma consulta só, que já traz tipo, tamanho e data).
+ * Vai por níveis: as pastas de um nível são listadas em paralelo e os atributos de todos os itens do
+ * nível são lidos em paralelo (no [br.ps2ponte.core.fs.LocalFile] cada atributo é um stat).
+ * Ordem determinística (nome sem diferenciar maiúsculas); ignora o que não dá para ler, nomes
+ * inválidos para exFAT e nomes repetidos sem diferenciar maiúsculas. Sem informação de links no
+ * VFile, laços de links simbólicos são contidos pelos limites de profundidade e de itens.
  */
-internal class TreeSnapshot(rootDir: File, private val log: EventLog, private val tz: java.util.TimeZone) {
+internal class TreeSnapshot(rootDir: VFile, private val log: EventLog, private val tz: TimeZone) {
     val root: Node
     var files = 0; private set
     var dirs = 0; private set
     var totalBytes = 0L; private set
     var skipped = 0; private set
     private var logged = 0
+    private var entries = 0
 
-    /** Lê os atributos em paralelo nas pastas grandes (cada stat no armazenamento do Android passa pelo FUSE). */
-    private val pool: ExecutorService? =
-        Runtime.getRuntime().availableProcessors().coerceIn(1, 8).let { n ->
-            if (n < 2) null else Executors.newFixedThreadPool(n) { r -> Thread(r, "exfat-stat").apply { isDaemon = true } }
+    /** Um item listado; [stat] lê os atributos (roda em outra thread). */
+    private class Item(val file: VFile) {
+        var name = ""
+        var isDir = false
+        var size = 0L
+        var mtime = 0L
+        var problem: String? = null
+
+        fun stat() {
+            try {
+                name = file.name
+                problem = badName(name)
+                if (problem != null) return
+                isDir = file.isDirectory
+                if (!isDir) {
+                    size = file.length()
+                    // isFile só quando precisa (no LocalFile cada atributo é um stat): vazio, sumiu ou especial.
+                    if (size <= 0 && !file.isFile) { problem = "não é arquivo comum"; return }
+                }
+                mtime = file.lastModified()
+            } catch (e: Exception) {
+                problem = "sem acesso"
+            }
         }
-    private val threads = Runtime.getRuntime().availableProcessors().coerceIn(1, 8)
+    }
 
     init {
+        val isDir = try { rootDir.isDirectory } catch (e: Exception) { false }
+        if (!isDir) throw IOException("não é uma pasta: ${rootDir.path}")
+        root = Node("", rootDir, true, 0, ExFat.timestamp(rootDir.lastModified(), tz))
+        // Trabalho de E/S (stat, consulta IPC do SAF): mais threads que núcleos ajuda.
+        val threads = (Runtime.getRuntime().availableProcessors() * 2).coerceIn(2, THREADS_MAX)
+        val pool: ExecutorService? = if (threads < 2) null else
+            Executors.newFixedThreadPool(threads) { r -> Thread(r, "exfat-arvore").apply { isDaemon = true } }
         try {
-            val rootPath = rootDir.toPath()
-            val attrs = try {
-                Files.readAttributes(rootPath, BasicFileAttributes::class.java)
-            } catch (e: IOException) {
-                throw IOException("não consegui ler a pasta ${rootDir.path}: ${e.message}", e)
+            var level = listOf(root)
+            var depth = 0
+            while (level.isNotEmpty()) {
+                // 1) Lista as pastas do nível.
+                val listings = parallelMap(pool, level) { d ->
+                    try { d.file.listFiles() } catch (e: Exception) { null }
+                }
+                if (depth == 0 && listings[0] == null) throw IOException("não consegui ler a pasta ${rootDir.path}")
+                // 2) Atributos de todos os itens do nível.
+                val items = ArrayList<Item>()
+                val start = IntArray(level.size + 1)
+                for (i in level.indices) {
+                    start[i] = items.size
+                    listings[i]?.forEach { items.add(Item(it)) }
+                }
+                start[level.size] = items.size
+                parallelChunks(pool, threads, items)
+                // 3) Monta os nós (sequencial).
+                val next = ArrayList<Node>()
+                for (i in level.indices) {
+                    val d = level[i]
+                    if (listings[i] == null) {
+                        skip(d.file.path, "não consegui listar")
+                        continue
+                    }
+                    addChildren(d, items.subList(start[i], start[i + 1]), depth, next)
+                }
+                level = next
+                depth++
             }
-            if (!attrs.isDirectory) throw IOException("não é uma pasta: ${rootDir.path}")
-            root = Node("", rootDir, true, 0, ExFat.timestamp(attrs.lastModifiedTime().toMillis(), tz))
-            val real = try { rootPath.toRealPath().toString() } catch (e: IOException) { rootDir.absolutePath }
-            scan(rootPath, root, real, ArrayList(), 0)
         } finally {
             pool?.shutdownNow()
         }
         if (skipped > logged) log.log("exFAT virtual: ${skipped - logged} outros itens ignorados")
     }
 
-    private fun skip(path: Path, why: String) {
-        skipped++
-        if (logged < 20) {
-            logged++
-            log.log("exFAT virtual: ignorado ($why): $path")
-        }
-    }
-
-    /** Um item listado; [stat] preenche os atributos (pode rodar em outra thread). */
-    private class Item(val path: Path, val name: String) {
-        var attrs: BasicFileAttributes? = null
-        var real: String? = null // destino de link simbólico para pasta
-        var problem: String? = null
-
-        fun stat() {
-            problem = badName(name)
-            if (problem != null) return
-            var a = try {
-                Files.readAttributes(path, BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
-            } catch (e: Exception) { problem = "sem acesso"; return }
-            if (a.isSymbolicLink) {
-                a = try { Files.readAttributes(path, BasicFileAttributes::class.java) } catch (e: Exception) {
-                    problem = "link quebrado"; return
-                }
-                if (a.isDirectory) {
-                    real = try { path.toRealPath().toString() } catch (e: Exception) { problem = "link quebrado"; return }
-                }
-            }
-            attrs = a
-        }
-    }
-
-    private fun statAll(items: List<Item>) {
-        val p = pool
-        if (p == null || items.size < PARALLEL_MIN) {
-            for (it in items) it.stat()
-            return
-        }
-        val chunk = (items.size + threads - 1) / threads
-        val tasks = items.chunked(chunk).map { part -> Callable { for (it in part) it.stat() } }
-        for (f in p.invokeAll(tasks)) {
-            try { f.get() } catch (e: ExecutionException) { /* cada item já trata os próprios erros */ }
-        }
-    }
-
-    private fun scan(dir: Path, node: Node, real: String, ancestors: ArrayList<String>, depth: Int) {
-        ancestors.add(real)
-        val list = ArrayList<Pair<String, Node>>()
-        val subdirs = ArrayList<Triple<Path, Node, String>>()
-        val items = ArrayList<Item>()
-        try {
-            val ds: DirectoryStream<Path> = Files.newDirectoryStream(dir)
-            ds.use { for (p in it) items.add(Item(p, p.fileName?.toString() ?: continue)) }
-        } catch (e: Exception) {
-            skip(dir, "não consegui listar")
-        }
-        statAll(items)
-        val sep = File.separator
+    private fun addChildren(node: Node, items: List<Item>, depth: Int, next: MutableList<Node>) {
+        val list = ArrayList<Pair<String, Node>>(items.size)
         for (it in items) {
-            val p = it.path
-            val name = it.name
-            val a = it.attrs
-            if (a == null) { skip(p, it.problem ?: "sem acesso"); continue }
-            val childReal = it.real
-            if (childReal != null && ancestors.any { anc -> childReal == anc || childReal.startsWith(if (anc.endsWith(sep)) anc else anc + sep) }) {
-                skip(p, "laço de link"); continue
-            }
-            val time = ExFat.timestamp(a.lastModifiedTime().toMillis(), tz)
-            if (a.isDirectory) {
-                if (depth >= MAX_DEPTH) { skip(p, "profundidade"); continue }
-                val n = Node(name, p.toFile(), true, 0, time)
-                list.add(ExFat.upperName(name) to n)
-                subdirs.add(Triple(p, n, childReal ?: (real + sep + name)))
-            } else if (a.isRegularFile) {
-                val n = Node(name, p.toFile(), false, a.size(), time)
-                list.add(ExFat.upperName(name) to n)
-            } else {
-                skip(p, "não é arquivo comum")
-            }
+            val p = it.problem
+            if (p != null) { skip(it.file.path, p); continue }
+            if (it.isDir && depth + 1 > MAX_DEPTH) { skip(it.file.path, "profundidade"); continue }
+            if (++entries > MAX_ENTRIES) { skip(it.file.path, "itens demais"); continue }
+            val n = Node(it.name, it.file, it.isDir, it.size, ExFat.timestamp(it.mtime, tz))
+            list.add(ExFat.upperName(it.name) to n)
         }
         list.sortWith { x, y ->
             val c = x.first.compareTo(y.first)
@@ -171,25 +147,45 @@ internal class TreeSnapshot(rootDir: File, private val log: EventLog, private va
         val kids = ArrayList<Node>(list.size)
         var prev: String? = null
         for ((key, n) in list) {
-            if (key == prev) { skip(n.file.toPath(), "nome repetido sem diferenciar maiúsculas"); continue }
+            if (key == prev) { skip(n.file.path, "nome repetido sem diferenciar maiúsculas"); continue }
             prev = key
             n.parent = node
             kids.add(n)
+            if (n.isDir) { dirs++; next.add(n) } else { files++; totalBytes += n.size }
         }
         node.children = kids.toTypedArray()
-        val kept = kids.toHashSet()
-        for (n in kids) {
-            if (n.isDir) dirs++ else { files++; totalBytes += n.size }
+    }
+
+    private fun skip(path: String, why: String) {
+        skipped++
+        if (logged < 20) {
+            logged++
+            log.log("exFAT virtual: ignorado ($why): $path")
         }
-        for ((p, n, r) in subdirs) {
-            if (n in kept) scan(p, n, r, ancestors, depth + 1)
+    }
+
+    private fun <T, R> parallelMap(pool: ExecutorService?, list: List<T>, f: (T) -> R): List<R> {
+        if (pool == null || list.size < 2) return list.map(f)
+        return pool.invokeAll(list.map { Callable { f(it) } }).map { it.get() }
+    }
+
+    private fun parallelChunks(pool: ExecutorService?, threads: Int, items: List<Item>) {
+        if (pool == null || items.size < PARALLEL_MIN) {
+            for (it in items) it.stat()
+            return
         }
-        ancestors.removeAt(ancestors.size - 1)
+        val chunk = (items.size + threads - 1) / threads
+        pool.invokeAll(items.chunked(chunk).map { part -> Callable { for (it in part) it.stat() } }).forEach { it.get() }
     }
 
     companion object {
-        const val MAX_DEPTH = 64
+        /** Profundidade máxima de pastas (o PS2 não usa caminhos fundos; também segura laços de links). */
+        const val MAX_DEPTH = 32
+
+        /** Máximo de itens na árvore (segura laços de links; ~45 MB de memória no pior caso). */
+        const val MAX_ENTRIES = 300_000
         private const val PARALLEL_MIN = 64
+        private const val THREADS_MAX = 16
 
         /** Motivo para recusar o nome, ou null se o exFAT/FatFs aceita. */
         fun badName(name: String): String? {

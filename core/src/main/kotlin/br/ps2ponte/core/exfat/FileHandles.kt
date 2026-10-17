@@ -1,16 +1,15 @@
 package br.ps2ponte.core.exfat
 
+import br.ps2ponte.core.fs.VHandle
 import java.io.IOException
-import java.io.RandomAccessFile
-import java.nio.ByteBuffer
 
 /**
- * Arquivos reais abertos (LRU pequeno). Leituras e gravações usam posição explícita no FileChannel,
- * então várias threads podem usar o mesmo arquivo; um arquivo tirado do cache só é fechado
- * quando ninguém mais o está usando.
+ * Arquivos reais abertos (LRU pequeno de [VHandle]). Leituras e gravações são posicionais, então
+ * várias threads podem usar o mesmo arquivo; um arquivo tirado do cache só é fechado quando
+ * ninguém mais o está usando.
  */
 internal class FileHandles(private val max: Int) {
-    internal class H(val raf: RandomAccessFile, val writable: Boolean) {
+    internal class H(val handle: VHandle, val writable: Boolean) {
         var users = 0
         var retired = false
     }
@@ -25,8 +24,9 @@ internal class FileHandles(private val max: Int) {
             cur.users++
             return cur
         }
-        if (write && !n.file.isFile) throw IOException("arquivo não existe mais")
-        val h = H(RandomAccessFile(n.file, if (write) "rw" else "r"), write)
+        // open(true) cria o arquivo se ele sumiu; aí a gravação não deve acontecer.
+        if (write && !n.file.exists()) throw IOException("arquivo não existe mais")
+        val h = H(n.file.open(write), write)
         if (cur != null) {
             map.remove(n)
             retire(cur)
@@ -51,15 +51,7 @@ internal class FileHandles(private val max: Int) {
     fun read(n: Node, pos: Long, buf: ByteArray, off: Int, len: Int): Int {
         val h = acquire(n, false)
         try {
-            val bb = ByteBuffer.wrap(buf, off, len)
-            val ch = h.raf.channel
-            var p = pos
-            while (bb.hasRemaining()) {
-                val r = ch.read(bb, p)
-                if (r <= 0) break
-                p += r
-            }
-            return bb.position() - off
+            return h.handle.readFully(pos, buf, off, len)
         } finally {
             release(h)
         }
@@ -68,21 +60,9 @@ internal class FileHandles(private val max: Int) {
     fun write(n: Node, pos: Long, buf: ByteArray, off: Int, len: Int) {
         val h = acquire(n, true)
         try {
-            val bb = ByteBuffer.wrap(buf, off, len)
-            val ch = h.raf.channel
-            var p = pos
-            while (bb.hasRemaining()) p += ch.write(bb, p)
+            h.handle.write(pos, buf, off, len)
         } finally {
             release(h)
-        }
-    }
-
-    fun flush() {
-        val list = synchronized(this) { map.values.filter { it.writable }.onEach { it.users++ } }
-        try {
-            for (h in list) h.raf.channel.force(false)
-        } finally {
-            for (h in list) release(h)
         }
     }
 
@@ -98,6 +78,6 @@ internal class FileHandles(private val max: Int) {
     }
 
     private fun closeQuietly(h: H) {
-        try { h.raf.close() } catch (_: IOException) {}
+        try { h.handle.close() } catch (_: IOException) {}
     }
 }
