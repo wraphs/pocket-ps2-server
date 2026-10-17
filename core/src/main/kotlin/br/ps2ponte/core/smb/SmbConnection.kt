@@ -1,30 +1,34 @@
 package br.ps2ponte.core.smb
 
+import br.ps2ponte.core.fs.VFile
+import br.ps2ponte.core.fs.VHandle
 import java.io.BufferedInputStream
 import java.io.DataInputStream
-import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.io.OutputStream
-import java.io.RandomAccessFile
 import java.net.Socket
-import java.nio.file.Files
 import java.security.SecureRandom
 import java.util.TimeZone
 
-/** Uma conexão TCP (um cliente). Atende um pedido por vez, na ordem em que chegam. */
+/**
+ * Uma conexão TCP (um cliente). Atende um pedido por vez, na ordem em que chegam.
+ * A árvore é de [VFile] (java.io.File ou SAF): no SAF cada metadado é IPC, então arquivos abertos
+ * guardam o que já se sabe ([OpenFile.isDir]) e o tamanho vem do [VHandle].
+ */
 internal class SmbConnection(private val srv: SmbServer, private val sock: Socket, private val ip: String) {
 
     private class Tree(val tid: Int, val ipc: Boolean)
 
+    /** Arquivo ou pasta aberto; [handle] é null para pastas. */
     private class OpenFile(
-        val fid: Int, val tid: Int, val uid: Int, val file: File, val path: String,
-        val raf: RandomAccessFile?, val writable: Boolean, var deleteOnClose: Boolean,
+        val fid: Int, val tid: Int, val uid: Int, val file: VFile, val path: String,
+        val handle: VHandle?, val isDir: Boolean, val writable: Boolean, var deleteOnClose: Boolean,
     )
 
     private class Blk(val wc: Int, val p: Int, val b: Int, val end: Int)
 
-    private class ReadData(val raf: RandomAccessFile, val offset: Long, val len: Int)
+    private class ReadData(val handle: VHandle, val offset: Long, val len: Int)
 
     private val inp = DataInputStream(BufferedInputStream(sock.getInputStream(), 128 * 1024))
     private val outs: OutputStream = sock.getOutputStream()
@@ -227,7 +231,7 @@ internal class SmbConnection(private val srv: SmbServer, private val sock: Socke
             val k = minOf(left, READ_CHUNK)
             out.pos = base
             out.need(k)
-            readAt(rd.raf, pos, out.b, base, k)
+            readAt(rd.handle, pos, out.b, base, k)
             outs.write(out.b, 0, base + k)
             left -= k
             pos += k
@@ -236,17 +240,10 @@ internal class SmbConnection(private val srv: SmbServer, private val sock: Socke
         srv.statsRef.bytesRead.addAndGet(rd.len.toLong())
     }
 
-    private fun readAt(raf: RandomAccessFile, pos: Long, buf: ByteArray, off: Int, n: Int) {
-        raf.seek(pos)
-        var done = 0
-        while (done < n) {
-            val k = raf.read(buf, off + done, n - done)
-            if (k < 0) {  // arquivo encolheu: completa com zeros para manter o fluxo
-                java.util.Arrays.fill(buf, off + done, off + n, 0)
-                return
-            }
-            done += k
-        }
+    private fun readAt(h: VHandle, pos: Long, buf: ByteArray, off: Int, n: Int) {
+        val done = h.readFully(pos, buf, off, n)
+        // arquivo encolheu: completa com zeros para manter o fluxo
+        if (done < n) java.util.Arrays.fill(buf, off + maxOf(done, 0), off + n, 0)
     }
 
     private fun ioStatus(e: IOException): Int {
@@ -587,7 +584,7 @@ internal class SmbConnection(private val srv: SmbServer, private val sock: Socke
         val mask = (if (i >= 0) norm.substring(i + 1) else norm).ifEmpty { "*" }
         val dir = paths.resolve(dirPath) ?: return St.ACCESS_DENIED
         if (!dir.isDirectory) return St.OBJECT_PATH_NOT_FOUND
-        val entries = listDir(dir, paths.root, mask, (attrs and 0x10) != 0)
+        val entries = listDir(dir, mask, (attrs and 0x10) != 0)
         if (entries.isEmpty()) return St.NO_SUCH_FILE
         val sid = newId(nextSid) { it in searches }
         nextSid = sid + 1
@@ -685,12 +682,12 @@ internal class SmbConnection(private val srv: SmbServer, private val sock: Socke
     }
 
     /** Níveis de QUERY_PATH/QUERY_FILE_INFORMATION. O smbman usa 0x101 e depois 0x102. */
-    private fun fileInfo(level: Int, f: File, path: String, of: OpenFile?): Int {
-        val dir = f.isDirectory
-        val size = if (dir) 0L else (of?.raf?.length() ?: f.length())
+    private fun fileInfo(level: Int, f: VFile, path: String, of: OpenFile?): Int {
+        val dir = of?.isDir ?: f.isDirectory
+        val size = if (dir) 0L else (of?.handle?.length() ?: f.length())
         val mtime = f.lastModified()
         val t = fileTime(mtime)
-        val attrs = attrsOf(f, ro)
+        val attrs = attrsOf(dir, ro)
         val delPending = if (of?.deleteOnClose == true) 1 else 0
         when (level) {
             1, 2 -> {  // SMB_INFO_STANDARD / SMB_INFO_QUERY_EA_SIZE
@@ -737,27 +734,24 @@ internal class SmbConnection(private val srv: SmbServer, private val sock: Socke
         val level = req.u16(r.po + 2)
         val d = r.dataOff
         when (level) {
-            0x101, 1004 -> {  // datas
+            0x101, 1004 -> {  // datas: VFile não muda datas; aceita sem efeito
                 if (r.dc < 32) return St.INVALID_PARAMETER
                 val lw = req.u64(d + 16)
-                if (lw != 0L && lw != -1L) {
-                    if (ro) return St.ACCESS_DENIED
-                    of.file.setLastModified(fromFileTime(lw))
-                }
+                if (lw != 0L && lw != -1L && ro) return St.ACCESS_DENIED
             }
             0x102, 1013 -> {  // apagar ao fechar
                 if (r.dc < 1) return St.INVALID_PARAMETER
                 val del = req.u8(d) != 0
-                if (del && ro) return St.ACCESS_DENIED
-                if (del && of.file.isDirectory && (of.file.list()?.isNotEmpty() == true)) return St.DIRECTORY_NOT_EMPTY
+                if (del && (ro || of.file == paths.root)) return St.ACCESS_DENIED
+                if (del && of.isDir && (of.file.listFiles()?.isNotEmpty() == true)) return St.DIRECTORY_NOT_EMPTY
                 of.deleteOnClose = del
             }
             0x103, 1019 -> {}  // tamanho alocado: ignorado
             0x104, 1020 -> {  // fim do arquivo
                 if (r.dc < 8) return St.INVALID_PARAMETER
-                val raf = of.raf ?: return St.INVALID_DEVICE_REQUEST
+                val h = of.handle ?: return St.INVALID_DEVICE_REQUEST
                 if (!of.writable || ro) return St.ACCESS_DENIED
-                raf.setLength(req.u64(d))
+                h.setLength(req.u64(d))
             }
             else -> return St.INVALID_LEVEL
         }
@@ -773,18 +767,15 @@ internal class SmbConnection(private val srv: SmbServer, private val sock: Socke
         if (level != 0x101 && level != 1004) return St.NOT_SUPPORTED
         if (r.dc < 32) return St.INVALID_PARAMETER
         val lw = req.u64(r.dataOff + 16)
-        if (lw != 0L && lw != -1L) {
-            if (ro) return St.ACCESS_DENIED
-            f.setLastModified(fromFileTime(lw))
-        }
+        if (lw != 0L && lw != -1L && ro) return St.ACCESS_DENIED  // VFile não muda datas: sem efeito
         tp.u16(0)
         return St.SUCCESS
     }
 
     private fun queryFs(r: TransReq): Int {
         val level = req.u16(r.po)
-        val total = paths.root.totalSpace
-        val free = paths.root.usableSpace
+        val total = paths.root.totalSpace()
+        val free = paths.root.usableSpace()
         val label = enc("PS2", uni)
         when (level) {
             1 -> {  // SMB_INFO_ALLOCATION
@@ -815,9 +806,10 @@ internal class SmbConnection(private val srv: SmbServer, private val sock: Socke
         val (name, _) = fmtStr(k.b, k.end) ?: return St.INVALID_PARAMETER
         val f = paths.resolve(name) ?: return St.ACCESS_DENIED
         if (!f.exists()) return notFound(f)
-        val size = if (f.isDirectory) 0L else f.length()
+        val dir = f.isDirectory
+        val size = if (dir) 0L else f.length()
         out.u8(10)
-        out.u16(attrsOf(f, ro))
+        out.u16(attrsOf(dir, ro))
         out.u32(f.lastModified() / 1000)
         out.u32(minOf(size, 0xFFFFFFFFL))
         out.zeros(10)
@@ -826,8 +818,8 @@ internal class SmbConnection(private val srv: SmbServer, private val sock: Socke
     }
 
     private fun queryDisk(): Int {
-        val total = paths.root.totalSpace
-        val free = paths.root.usableSpace
+        val total = paths.root.totalSpace()
+        val free = paths.root.usableSpace()
         var perUnit = 1
         while (total / (512L * perUnit) > 0xFFFF && perUnit < 0x8000) perUnit *= 2
         val unit = 512L * perUnit
@@ -867,8 +859,8 @@ internal class SmbConnection(private val srv: SmbServer, private val sock: Socke
             delOnClose = (opts and 0x1000) != 0)
         if (st != St.SUCCESS) return st
         val of = files[chainFid]!!
-        val dir = of.raf == null
-        val size = of.raf?.length() ?: 0L
+        val dir = of.isDir
+        val size = of.handle?.length() ?: 0L
         val tm = fileTime(f.lastModified())
         out.u8(34)
         andx()
@@ -876,7 +868,7 @@ internal class SmbConnection(private val srv: SmbServer, private val sock: Socke
         out.u16(of.fid)
         out.u32(lastAction)
         out.u64(tm); out.u64(tm); out.u64(tm); out.u64(tm)
-        out.u32(attrsOf(f, ro))
+        out.u32(attrsOf(dir, ro))
         out.u64(allocOf(size))
         out.u64(size)             // EndOfFile (64 bits: o smbman usa como tamanho)
         out.u16(0)                // disco
@@ -911,11 +903,11 @@ internal class SmbConnection(private val srv: SmbServer, private val sock: Socke
         val st = doOpen(t, f, name, disp, write, dirOnly = false, fileOnly = true, delOnClose = false)
         if (st != St.SUCCESS) return st
         val of = files[chainFid]!!
-        val size = of.raf?.length() ?: 0L
+        val size = of.handle?.length() ?: 0L
         out.u8(15)
         andx()
         out.u16(of.fid)
-        out.u16(attrsOf(f, ro))
+        out.u16(attrsOf(of.isDir, ro))
         out.u32(f.lastModified() / 1000)     // UTIME
         out.u32(minOf(size, 0xFFFFFFFFL))    // >4 GiB: o smbman pergunta o tamanho por QUERY_PATH
         out.u16(if (write) acc else 0)
@@ -935,7 +927,7 @@ internal class SmbConnection(private val srv: SmbServer, private val sock: Socke
      * Em sucesso o arquivo aberto fica em files[chainFid] e a ação em [lastAction].
      */
     private fun doOpen(
-        t: Tree, f: File, path: String, disp: Int, write: Boolean, dirOnly: Boolean, fileOnly: Boolean, delOnClose: Boolean,
+        t: Tree, f: VFile, path: String, disp: Int, write: Boolean, dirOnly: Boolean, fileOnly: Boolean, delOnClose: Boolean,
     ): Int {
         val exists = f.exists()
         val isDir = exists && f.isDirectory
@@ -959,22 +951,22 @@ internal class SmbConnection(private val srv: SmbServer, private val sock: Socke
             if (f.parentFile?.isDirectory != true) return St.OBJECT_PATH_NOT_FOUND
             if (dir && !f.mkdir()) return St.ACCESS_DENIED
         }
-        val raf = if (dir) null else RandomAccessFile(f, if (write || creates || truncates) "rw" else "r")
+        val handle = if (dir) null else f.open(write || creates || truncates)  // open(true) cria se não existe
         try {
-            if (truncates && raf != null) raf.setLength(0)
+            if (truncates && handle != null) handle.setLength(0)
         } catch (e: IOException) {
-            raf?.close()
+            handle?.close()
             throw e
         }
         val fid = newId(nextFid) { it in files }
         nextFid = fid + 1
-        files[fid] = OpenFile(fid, t.tid, curUid, f, path, raf, write, delOnClose)
+        files[fid] = OpenFile(fid, t.tid, curUid, f, path, handle, dir, write, delOnClose)
         chainFid = fid
         if (!dir) srv.log("SMB: $ip abriu ${displayPath(path)}")
         return St.SUCCESS
     }
 
-    private fun notFound(f: File): Int =
+    private fun notFound(f: VFile): Int =
         if (f.parentFile?.isDirectory == true) St.OBJECT_NAME_NOT_FOUND else St.OBJECT_PATH_NOT_FOUND
 
     private fun displayPath(path: String): String = "\\" + path.replace('/', '\\').trim('\\')
@@ -984,10 +976,10 @@ internal class SmbConnection(private val srv: SmbServer, private val sock: Socke
 
     private fun closeFile(of: OpenFile) {
         try {
-            of.raf?.close()
+            of.handle?.close()
         } catch (e: IOException) {
         }
-        if (of.deleteOnClose) of.file.delete()
+        if (of.deleteOnClose && of.file != paths.root) of.file.delete()
     }
 
     // ---------------------------------------------------------------- leitura/escrita
@@ -1002,9 +994,9 @@ internal class SmbConnection(private val srv: SmbServer, private val sock: Socke
         var count = low.toLong()
         if ((clientCaps and Cap.LARGE_READX) != 0 && high != 0xFFFF) count = count or (high.toLong() shl 16)
         val of = fileFor(fid) ?: return St.INVALID_HANDLE
-        val raf = of.raf ?: return St.INVALID_DEVICE_REQUEST
+        val h = of.handle ?: return St.INVALID_DEVICE_REQUEST
         if (offset < 0) return St.INVALID_PARAMETER
-        val size = raf.length()
+        val size = h.length()  // do arquivo aberto: nenhum metadado do VFile por leitura
         val n = if (offset >= size) 0 else minOf(count, size - offset, MAX_READ.toLong()).toInt()
         out.u8(12)
         andx()
@@ -1019,7 +1011,7 @@ internal class SmbConnection(private val srv: SmbServer, private val sock: Socke
         out.u16(minOf(n + 1, 0xFFFF))
         out.u8(0)                    // 1 byte de enchimento: dados em 60, como Windows/Samba
         out.set16(doPos, out.pos - 4)
-        readData = ReadData(raf, offset, n)
+        readData = ReadData(h, offset, n)
         stopChain = true
         return St.SUCCESS
     }
@@ -1037,12 +1029,11 @@ internal class SmbConnection(private val srv: SmbServer, private val sock: Socke
         if (lenHigh != 0 && dataOff + big <= req.len) n = big
         if (dataOff < 32 || dataOff + n > req.len) return St.INVALID_PARAMETER
         val of = fileFor(fid) ?: return St.INVALID_HANDLE
-        val raf = of.raf ?: return St.INVALID_DEVICE_REQUEST
+        val h = of.handle ?: return St.INVALID_DEVICE_REQUEST
         if (!of.writable || ro) return St.ACCESS_DENIED
         if (offset < 0) return St.INVALID_PARAMETER
         if (n > 0) {
-            raf.seek(offset)
-            raf.write(req.b, dataOff, n)
+            h.write(offset, req.b, dataOff, n)
             srv.statsRef.bytesWritten.addAndGet(n.toLong())
         }
         out.u8(6)
@@ -1057,22 +1048,16 @@ internal class SmbConnection(private val srv: SmbServer, private val sock: Socke
 
     private fun close(k: Blk): Int {
         val of = fileFor(req.u16(k.p)) ?: return St.INVALID_HANDLE
-        val lw = req.u32(k.p + 2)
+        // LastWriteTime (k.p + 2) é ignorado: VFile não muda datas.
         files.remove(of.fid)
         closeFile(of)
-        if (lw != 0L && lw != 0xFFFFFFFFL && !ro && !of.deleteOnClose) of.file.setLastModified(lw * 1000)
         return emptyReply()
     }
 
+    /** VHandle não tem sync: as escritas já vão direto para o arquivo; só confere o FID. */
     private fun flush(k: Blk): Int {
         val fid = req.u16(k.p)
-        val list = if (fid == 0xFFFF) files.values.toList() else listOf(files[fid] ?: return St.INVALID_HANDLE)
-        for (of in list) {
-            try {
-                if (of.writable) of.raf?.fd?.sync()
-            } catch (e: IOException) {
-            }
-        }
+        if (fid != 0xFFFF && !files.containsKey(fid)) return St.INVALID_HANDLE
         return emptyReply()
     }
 
@@ -1128,7 +1113,7 @@ internal class SmbConnection(private val srv: SmbServer, private val sock: Socke
         if (!f.exists()) return notFound(f)
         if (!f.isDirectory) return St.NOT_A_DIRECTORY
         if (ro || f == paths.root) return St.ACCESS_DENIED
-        if (f.list()?.isNotEmpty() == true) return St.DIRECTORY_NOT_EMPTY
+        if (f.listFiles()?.isNotEmpty() == true) return St.DIRECTORY_NOT_EMPTY
         if (!f.delete()) return St.ACCESS_DENIED
         return emptyReply()
     }
@@ -1146,25 +1131,31 @@ internal class SmbConnection(private val srv: SmbServer, private val sock: Socke
         val leaf = if (i >= 0) np.substring(i + 1) else np
         if (leaf.isEmpty() || leaf == "." || leaf == ".." || hasWildcards(leaf)) return St.OBJECT_NAME_INVALID
         if (!parent.isDirectory) return St.OBJECT_PATH_NOT_FOUND
-        val dst = File(parent, leaf)
-        val clash = parent.listFiles()?.firstOrNull { it.name.equals(leaf, ignoreCase = true) }
+        val list = parent.listFiles() ?: emptyList()
+        // Sem caminho canônico no SAF: "o mesmo item" = mesma pasta e mesmo nome real (da listagem).
+        val sameDir = src.parentFile?.path?.equals(parent.path, ignoreCase = true) == true
+        val srcReal = if (!sameDir) null else
+            list.firstOrNull { it.name == src.name } ?: list.firstOrNull { it.name.equals(src.name, ignoreCase = true) }
+        val exact = list.firstOrNull { it.name == leaf }
+        if (exact != null) return if (exact == srcReal) emptyReply() else St.OBJECT_NAME_COLLISION
+        val clash = list.firstOrNull { it.name.equals(leaf, ignoreCase = true) }
         val ok = if (clash != null) {
-            if (!sameFile(clash, src)) return St.OBJECT_NAME_COLLISION
-            if (clash.name == leaf) return emptyReply()
+            if (srcReal == null || clash != srcReal) return St.OBJECT_NAME_COLLISION
             // só muda maiúsculas/minúsculas: passa por um nome temporário
-            val tmp = File(parent, ".ps2ponte-${System.nanoTime()}")
-            src.renameTo(tmp) && tmp.renameTo(dst)
+            val tmp = parent.child(".ps2ponte-${System.nanoTime()}")
+            when {
+                !srcReal.renameTo(tmp) -> false
+                tmp.renameTo(parent.child(leaf)) -> true
+                else -> {
+                    tmp.renameTo(srcReal)  // desfaz
+                    false
+                }
+            }
         } else {
-            src.renameTo(dst)
+            (srcReal ?: src).renameTo(parent.child(leaf))
         }
         if (!ok) return St.ACCESS_DENIED
         return emptyReply()
-    }
-
-    private fun sameFile(a: File, b: File): Boolean = try {
-        Files.isSameFile(a.toPath(), b.toPath())
-    } catch (e: Exception) {
-        a.canonicalPath == b.canonicalPath
     }
 
     companion object {

@@ -2,6 +2,7 @@ package br.ps2ponte.core.smb
 
 import br.ps2ponte.core.EventLog
 import br.ps2ponte.core.TransferStats
+import br.ps2ponte.core.fs.LocalFile
 import br.ps2ponte.core.fs.LocalTree
 import br.ps2ponte.core.smb.OplClient.Companion.CAP_LARGE_FILES
 import br.ps2ponte.core.smb.OplClient.Companion.CAP_LARGE_READX
@@ -652,5 +653,65 @@ class OplSmbTest {
         again.close()
         // os arquivos foram fechados: dá para apagar a pasta
         assertTrue(File(root, "DVD/Jogo A.iso").delete())
+    }
+
+    /** O SMB só vê VFile: roda sobre um VFile que não é LocalFile (caminhos "saf:/..."), como o do SAF. */
+    @Test
+    fun servidorSobreVFileQueNaoELocalFile() {
+        val saf = FakeSafFile.root(LocalFile.root(root))
+        val s = SmbServer(LocalTree(saf), port = 0, log = EventLog { logs += it }, stats = stats)
+        s.start()
+        server = s
+
+        val c = client()
+        val (uid, tid) = menuLogon(c)
+        assertEquals(listOf(".", "..", "Jogo A.iso", "Jogo B.iso", "leia.txt", "sub"), c.listDir(uid, tid, "\\DVD")!!.map { it.FileName })
+        val info = OplClient.PathInformation()
+        assertEquals(0, c.smb_QueryPathInformation(uid, tid, info, "\\dvd\\jogo a.iso"))
+        assertEquals(gameA.size.toLong(), info.EndOfFile)
+        val size = LongArray(1)
+        val fid = c.smb_OpenAndX(uid, tid, "\\DVD\\Jogo A.iso", size, O_RDONLY)
+        assertEquals(gameA.size.toLong(), size[0])
+        val data = ByteArray(gameA.size)
+        assertEquals(data.size, c.smb_ReadFile(uid, tid, fid, 0, data, data.size))
+        assertArrayEquals(gameA, data)
+        assertEquals(0, c.smb_Close(uid, tid, fid))
+        // escrita, truncar, renomear (inclusive só maiúsculas e entre pastas), pastas, apagar
+        val cfg = "\$VMC_0=slot0\r\n".toByteArray()
+        val wfid = c.smb_OpenAndX(uid, tid, "\\CFG\\SLUS_200.62.cfg", size, O_WRONLY or O_CREAT or O_TRUNC)
+        assertEquals(cfg.size, c.smb_WriteFile(uid, tid, wfid, 0, cfg, cfg.size))
+        assertEquals(0, c.smb_Close(uid, tid, wfid))
+        assertArrayEquals(cfg, File(root, "CFG/SLUS_200.62.cfg").readBytes())
+        val tfid = c.smb_OpenAndX(uid, tid, "\\CFG\\SLUS_200.62.cfg", size, O_WRONLY or O_CREAT or O_TRUNC)
+        assertEquals(0L, size[0])
+        assertEquals(0, c.smb_Close(uid, tid, tfid))
+        assertEquals(0L, File(root, "CFG/SLUS_200.62.cfg").length())
+        assertEquals(0, c.smb_Rename(uid, tid, "\\CFG\\SLUS_200.62.cfg", "\\CFG\\velho.cfg"))
+        assertEquals(0, c.smb_Rename(uid, tid, "\\CFG\\velho.cfg", "\\CFG\\VELHO.cfg"))
+        assertTrue(File(root, "CFG").list()!!.contains("VELHO.cfg"))
+        assertEquals(0, c.smb_Rename(uid, tid, "\\CFG\\VELHO.cfg", "\\VMC\\movido.cfg"))
+        assertTrue(File(root, "VMC/movido.cfg").isFile)
+        assertTrue(c.smb_Rename(uid, tid, "\\VMC\\movido.cfg", "\\VMC\\slot0.bin") < 0, "destino existe")
+        assertEquals(0, c.smb_Delete(uid, tid, "\\VMC\\movido.cfg"))
+        assertFalse(File(root, "VMC/movido.cfg").exists())
+        assertEquals(0, c.smb_ManageDirectory(uid, tid, "\\ART", SMB_COM_CREATE_DIRECTORY))
+        assertEquals(0, c.smb_ManageDirectory(uid, tid, "\\ART", SMB_COM_DELETE_DIRECTORY))
+        assertTrue(c.smb_ManageDirectory(uid, tid, "\\", SMB_COM_DELETE_DIRECTORY) < 0, "raiz protegida")
+        assertTrue(c.smb_Rename(uid, tid, "\\", "\\x") < 0, "raiz protegida")
+        assertTrue(root.isDirectory)
+        assertNotNull(c.smb_QueryInformationDisk(uid, tid))
+
+        // jogo: as leituras não consultam metadados do VFile (no SAF cada um seria IPC)
+        val g = client()
+        gameLogon(g)
+        val gfid = IntArray(1)
+        assertEquals(1, g.cdvdman_OpenAndX("\\DVD\\Jogo A.iso", gfid, false))
+        val before = saf.metadataCalls.get()
+        val buf = ByteArray(gameA.size)
+        assertEquals(buf.size, g.cdvdman_ReadFile(gfid[0], 0, 0, buf, buf.size))  // 38 READ_ANDX de 8 KiB
+        assertEquals(before, saf.metadataCalls.get(), "READ_ANDX chamou metadados do VFile")
+        assertArrayEquals(gameA, buf)
+        assertEquals(0, g.cdvdman_Close(gfid[0]))
+        assertTrue(logs.contains("SMB: 127.0.0.1 abriu \\DVD\\Jogo A.iso"), logs.toString())
     }
 }
