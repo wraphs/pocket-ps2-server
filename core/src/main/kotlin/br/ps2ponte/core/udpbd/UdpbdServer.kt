@@ -76,8 +76,11 @@ class UdpbdServer(
                 s.receive(pkt)
                 handle(s, buf, pkt.length, InetSocketAddress(pkt.address, pkt.port))
             } catch (e: SocketException) {
-                if (running) log.log("UDPBD: erro de rede: ${e.message}")
-                break
+                // Só para se o socket foi fechado (Parar). "Rede inalcançável" ao enviar acontece quando o
+                // adaptador do hub cai por um instante: continua atendendo quando ele voltar.
+                if (!running || s.isClosed) break
+                log.log("UDPBD: rede indisponível (${e.message}); continuando")
+                Thread.sleep(200)
             } catch (e: Exception) {
                 log.log("UDPBD: erro: ${e.message}")
             }

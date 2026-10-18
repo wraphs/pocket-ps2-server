@@ -125,7 +125,9 @@ class UdpfsServer(
                 putU16(inform, 4, d.localPort)
                 sendTo(d, inform, addr)
             } catch (e: SocketException) {
-                break
+                // Só para no Parar; um erro de envio com o adaptador do hub fora do ar não derruba o servidor
+                if (!running || s.isClosed || d.isClosed) break
+                Thread.sleep(200)
             } catch (e: Exception) {
                 log.log("UDPFS: erro na descoberta: ${e.message}")
             }
@@ -142,7 +144,9 @@ class UdpfsServer(
                 d.receive(p)
                 handleData(d, buf.copyOf(p.length), InetSocketAddress(p.address, p.port))
             } catch (e: SocketException) {
-                break
+                if (!running || d.isClosed) break
+                log.log("UDPFS: rede indisponível (${e.message}); continuando")
+                Thread.sleep(200)
             } catch (e: Exception) {
                 log.log("UDPFS: erro: ${e.message}")
             }

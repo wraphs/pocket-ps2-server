@@ -30,7 +30,8 @@ class ReplyRouter(private val interfaces: () -> List<Subnet> = ::localSubnets) {
 
     private fun subnets(): List<Subnet> {
         val now = System.currentTimeMillis()
-        if (now - cacheTime > 5_000) {
+        // 1 s: depois de um esbarrão no hub a interface do cabo volta e a resposta precisa achar o broadcast novo logo
+        if (now - cacheTime > 1_000) {
             cache = try { interfaces() } catch (e: Exception) { emptyList() }
             cacheTime = now
         }

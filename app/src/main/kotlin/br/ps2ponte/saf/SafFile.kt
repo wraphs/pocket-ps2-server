@@ -228,10 +228,16 @@ class SafFile internal constructor(
             }
         }
         if (isDirectory) throw IOException("é uma pasta: $path")
+        val modo = if (write) "rw" else "r"
         val id = docId ?: throw FileNotFoundException(path)
-        val pfd = raiz.resolver.openFileDescriptor(raiz.docUri(id), if (write) "rw" else "r")
-            ?: throw IOException("não consegui abrir $path")
-        return SafHandle(pfd, if (write) raiz::mudou else null)
+        val pfd = raiz.resolver.openFileDescriptor(raiz.docUri(id), modo) ?: throw IOException("não consegui abrir $path")
+        // Reabertura depois de o pendrive cair e voltar (esbarrão no hub): procura o arquivo de novo
+        val reabrir = {
+            raiz.mudou()
+            val novo = docId.takeIf { exists() } ?: throw FileNotFoundException(path)
+            raiz.resolver.openFileDescriptor(raiz.docUri(novo), modo) ?: throw IOException("não consegui reabrir $path")
+        }
+        return SafHandle(pfd, reabrir, if (write) raiz::mudou else null)
     }
 
     override fun equals(other: Any?) = other is SafFile && other.path == path
@@ -247,37 +253,75 @@ class SafFile internal constructor(
 }
 
 /** Arquivo aberto pelo SAF: E/S posicional (pread/pwrite) direto no descritor, segura entre threads. */
-private class SafHandle(private val pfd: ParcelFileDescriptor, private val aoMudar: (() -> Unit)?) : VHandle {
-    private val fd = pfd.fileDescriptor
+private class SafHandle(
+    @Volatile private var pfd: ParcelFileDescriptor,
+    private val reabrir: () -> ParcelFileDescriptor,
+    private val aoMudar: (() -> Unit)?,
+) : VHandle {
+    private val trava = Any()
+    @Volatile private var fechado = false
 
-    private inline fun <T> io(f: () -> T): T {
+    /**
+     * Executa a operação no descritor atual. Se ele morrer (o pendrive caiu num esbarrão no hub),
+     * espera o pendrive voltar e reabre o arquivo, por até [ESPERA_MS], e tenta de novo: o PS2 só
+     * aguenta alguns segundos sem resposta, então voltar rápido é o que evita o jogo travar.
+     */
+    private fun <T> io(f: (java.io.FileDescriptor) -> T): T {
+        var reaberto = false
         while (true) {
+            val atual = pfd
             try {
-                return f()
+                return f(atual.fileDescriptor)
             } catch (e: ErrnoException) {
-                if (e.errno != OsConstants.EINTR) throw IOException(e.message, e)
+                if (e.errno == OsConstants.EINTR) continue
+                if (reaberto || fechado) throw IOException(e.message, e)
+                reabrirEsperando(atual, e)
+                reaberto = true
+            }
+        }
+    }
+
+    private fun reabrirEsperando(morto: ParcelFileDescriptor, causa: ErrnoException) = synchronized(trava) {
+        if (pfd !== morto) return // outra thread já reabriu
+        val limite = System.currentTimeMillis() + ESPERA_MS
+        while (!fechado) {
+            try {
+                val novo = reabrir()
+                try { morto.close() } catch (_: Exception) {}
+                pfd = novo
+                return
+            } catch (e: Exception) {
+                if (System.currentTimeMillis() > limite) throw IOException("pendrive não voltou: ${causa.message}", causa)
+                Thread.sleep(250)
             }
         }
     }
 
     override fun read(pos: Long, buf: ByteArray, off: Int, len: Int): Int {
         if (len == 0) return 0
-        val n = io { Os.pread(fd, buf, off, len, pos) }
+        val n = io { fd -> Os.pread(fd, buf, off, len, pos) }
         return if (n == 0) -1 else n
     }
 
     override fun write(pos: Long, buf: ByteArray, off: Int, len: Int) {
         var feito = 0
-        while (feito < len) feito += io { Os.pwrite(fd, buf, off + feito, len - feito, pos + feito) }
+        while (feito < len) feito += io { fd -> Os.pwrite(fd, buf, off + feito, len - feito, pos + feito) }
         aoMudar?.invoke()
     }
 
-    override fun length(): Long = io { Os.fstat(fd).st_size }
+    override fun length(): Long = io { fd -> Os.fstat(fd).st_size }
 
     override fun setLength(n: Long) {
-        io { Os.ftruncate(fd, n) }
+        io { fd -> Os.ftruncate(fd, n) }
         aoMudar?.invoke()
     }
 
-    override fun close() = pfd.close()
+    override fun close() {
+        fechado = true
+        pfd.close()
+    }
+
+    companion object {
+        private const val ESPERA_MS = 8000L
+    }
 }
