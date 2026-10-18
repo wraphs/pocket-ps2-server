@@ -2,6 +2,7 @@ package br.ps2ponte
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -23,8 +24,10 @@ import android.os.storage.StorageManager
 import android.os.storage.StorageVolume
 import android.provider.DocumentsContract
 import android.provider.Settings
+import android.view.Gravity
 import android.view.View
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
@@ -41,7 +44,7 @@ class MainActivity : Activity() {
     private lateinit var usb: UsbManager
 
     private lateinit var tvRede: TextView
-    private lateinit var tvPerm: TextView
+    private lateinit var painelPerm: LinearLayout
     private lateinit var btnArquivos: Button
     private lateinit var btnBateria: Button
     private lateinit var rbPasta: RadioButton
@@ -53,10 +56,12 @@ class MainActivity : Activity() {
     private lateinit var painelUsb: LinearLayout
     private lateinit var listaUsb: RadioGroup
     private lateinit var tvUsbVazio: TextView
+    private lateinit var cbSmb: CheckBox
+    private lateinit var cbUdpfs: CheckBox
+    private lateinit var cbUdpbd: CheckBox
     private lateinit var btnIniciar: Button
     private lateinit var tvStatus: TextView
     private lateinit var tvLog: TextView
-    private lateinit var tvAjuda: TextView
 
     private val handler = Handler(Looper.getMainLooper())
     private var ultimoBytes = 0L
@@ -80,7 +85,7 @@ class MainActivity : Activity() {
             val dev: UsbDevice? = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
             else @Suppress("DEPRECATION") intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
             if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false) && dev != null) {
-                ServidorService.iniciar(this@MainActivity, ServidorService.MODO_USB, null, dev.deviceName)
+                ServidorService.iniciar(this@MainActivity, ServidorService.MODO_USB, null, dev.deviceName, servidoresEscolhidos())
             } else {
                 aviso("Sem permissão para usar o pendrive")
             }
@@ -89,7 +94,10 @@ class MainActivity : Activity() {
 
     /** Pendrive conectado/desconectado (aviso do sistema). */
     private val receptorUsb = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) = atualizarUsb()
+        override fun onReceive(context: Context, intent: Intent) {
+            atualizarUsb()
+            atualizarVolumes()
+        }
     }
 
     // ------------------------------------------------------------------ ciclo de vida
@@ -140,18 +148,10 @@ class MainActivity : Activity() {
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
-    private fun titulo(t: String) = TextView(this).apply {
-        text = t
-        textSize = 18f
-        setTypeface(typeface, Typeface.BOLD)
-        setPadding(0, dp(18), 0, dp(4))
-    }
-
     private fun texto(t: String = "") = TextView(this).apply {
         text = t
         textSize = 15f
         setPadding(0, dp(2), 0, dp(2))
-        setTextIsSelectable(true)
     }
 
     private fun botao(t: String, acao: () -> Unit) = Button(this).apply {
@@ -160,32 +160,59 @@ class MainActivity : Activity() {
         setOnClickListener { acao() }
     }
 
+    /** Botãozinho "ⓘ" que abre uma explicação. [conteudo] é calculado na hora (usa o IP atual). */
+    private fun info(titulo: String, conteudo: () -> String) = TextView(this).apply {
+        text = "ⓘ"
+        textSize = 20f
+        setPadding(dp(12), dp(4), dp(12), dp(4))
+        contentDescription = "Ajuda: $titulo"
+        setOnClickListener {
+            AlertDialog.Builder(this@MainActivity).setTitle(titulo).setMessage(conteudo()).setPositiveButton("OK", null).show()
+        }
+    }
+
+    /** Linha: [principal] seguido do ⓘ. */
+    private fun linha(principal: View, ajuda: View): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        addView(principal, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        addView(ajuda)
+    }
+
+    private fun titulo(t: String, ajudaTitulo: String? = null, ajuda: (() -> String)? = null): View {
+        val tv = TextView(this).apply {
+            text = t
+            textSize = 18f
+            setTypeface(typeface, Typeface.BOLD)
+        }
+        val v = if (ajuda != null) linha(tv, info(ajudaTitulo ?: t, ajuda)) else tv
+        v.setPadding(0, dp(16), 0, dp(2))
+        return v
+    }
+
     private fun montarTela(): View {
         val raiz = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(8), dp(16), dp(32))
+            setPadding(dp(16), dp(4), dp(16), dp(32))
         }
 
-        raiz.addView(texto("Servidor de jogos para o PS2 pelo cabo de rede (SMB1, UDPFS e UDPBD)."))
+        raiz.addView(titulo("Rede", "Rede pelo cabo") { ajudaRede() })
+        tvRede = texto()
+        raiz.addView(linha(tvRede, botao("Ancoragem") { abrirAncoragem() }))
 
-        raiz.addView(titulo("1. Rede"))
-        tvRede = texto().also { raiz.addView(it) }
-        raiz.addView(botao("Abrir Ancoragem (ligar \"Ancoragem Ethernet\")") { abrirAncoragem() })
+        painelPerm = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        btnArquivos = botao("Permitir acesso aos arquivos") { abrirPermissaoArquivos() }.also { painelPerm.addView(it) }
+        btnBateria = botao("Liberar bateria em segundo plano") { pedirBateria() }.also { painelPerm.addView(it) }
+        raiz.addView(painelPerm)
 
-        raiz.addView(titulo("2. Permissões"))
-        tvPerm = texto().also { raiz.addView(it) }
-        btnArquivos = botao("Permitir acesso a todos os arquivos") { abrirPermissaoArquivos() }.also { raiz.addView(it) }
-        btnBateria = botao("Não deixar a bateria parar o servidor") { pedirBateria() }.also { raiz.addView(it) }
-
-        raiz.addView(titulo("3. O que servir"))
-        val grupo = RadioGroup(this)
-        rbPasta = RadioButton(this).apply { text = "Uma pasta do celular ou do pendrive (OPL, NHDDL e Neutrino) — recomendado"; id = View.generateViewId() }
-        rbUsb = RadioButton(this).apply { text = "Pendrive/HD inteiro em modo bloco (só Neutrino/XEB+ via UDPBD)"; id = View.generateViewId() }
+        raiz.addView(titulo("Jogos", "De onde vêm os jogos") { ajudaFonte() })
+        val grupo = RadioGroup(this).apply { orientation = RadioGroup.HORIZONTAL }
+        rbPasta = RadioButton(this).apply { text = "Pasta"; id = View.generateViewId() }
+        rbUsb = RadioButton(this).apply { text = "Pendrive inteiro (bloco)"; id = View.generateViewId() }
         grupo.addView(rbPasta)
         grupo.addView(rbUsb)
-        // Marca antes de pôr o ouvinte: o isChecked dispara o ouvinte do RadioGroup, e o atualizarModo()
-        // mexeria em painelPasta/painelUsb, que ainda não existem (o app fechava ao abrir). O onResume
-        // chama atualizarModo().
+        // Marca antes de pôr o ouvinte: o isChecked dispara o ouvinte, e o atualizarModo() mexeria em
+        // painéis que ainda não existem. O onResume chama atualizarModo().
         if (prefs.getString("modo", ServidorService.MODO_PASTA) == ServidorService.MODO_USB) rbUsb.isChecked = true else rbPasta.isChecked = true
         grupo.setOnCheckedChangeListener { _, id ->
             prefs.edit().putString("modo", if (id == rbUsb.id) ServidorService.MODO_USB else ServidorService.MODO_PASTA).apply()
@@ -195,14 +222,13 @@ class MainActivity : Activity() {
 
         painelPasta = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         tvPasta = texto().also { painelPasta.addView(it) }
-        btnCriarPastas = botao("Criar as pastas do OPL aqui (DVD, CD, ART, CFG, VMC...)") { criarPastasOpl() }.also { painelPasta.addView(it) }
+        btnCriarPastas = botao("Criar pastas do OPL (DVD, CD, ART…)") { criarPastasOpl() }.also { painelPasta.addView(it) }
         listaVolumes = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         painelPasta.addView(listaVolumes)
-        painelPasta.addView(botao("Escolher outra pasta…") { escolherPasta() })
+        painelPasta.addView(botao("Outra pasta…") { escolherPasta() })
         raiz.addView(painelPasta)
 
         painelUsb = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        painelUsb.addView(texto("O pendrive precisa estar no mesmo hub. Antes de iniciar, ejete-o em Configurações › Manutenção › Armazenamento (ele continua aparecendo aqui). Enquanto o servidor roda, o Android não o enxerga; depois de parar, desconecte e reconecte."))
         listaUsb = RadioGroup(this).also { painelUsb.addView(it) }
         listaUsb.setOnCheckedChangeListener { g, id ->
             g.findViewById<RadioButton>(id)?.tag?.let { prefs.edit().putString("usb", it as String).apply() }
@@ -211,71 +237,93 @@ class MainActivity : Activity() {
         painelUsb.addView(botao("Procurar de novo") { atualizarUsb() })
         raiz.addView(painelUsb)
 
+        raiz.addView(titulo("Servidores"))
+        cbSmb = caixaServidor(raiz, "smb", "SMB1 · OPL", "SMB1 (OPL)") { ajudaSmb() }
+        cbUdpfs = caixaServidor(raiz, "udpfs", "UDPFS · NHDDL, Neutrino, RiptOPL", "UDPFS") { ajudaUdpfs() }
+        cbUdpbd = caixaServidor(raiz, "udpbd", "UDPBD · Neutrino, XEB+, RiptOPL", "UDPBD") { ajudaUdpbd() }
+
         btnIniciar = Button(this).apply {
             textSize = 20f
             isAllCaps = false
             setPadding(0, dp(14), 0, dp(14))
             setOnClickListener { iniciarOuParar() }
         }
-        raiz.addView(btnIniciar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(20) })
+        raiz.addView(btnIniciar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(16) })
         tvStatus = texto().apply { setTypeface(typeface, Typeface.BOLD) }.also { raiz.addView(it) }
 
-        raiz.addView(titulo("Como configurar o PS2"))
-        tvAjuda = texto().also { raiz.addView(it) }
-
         raiz.addView(titulo("Log"))
-        tvLog = texto().apply { typeface = Typeface.MONOSPACE; textSize = 12f }.also { raiz.addView(it) }
+        tvLog = texto().apply { typeface = Typeface.MONOSPACE; textSize = 12f; setTextIsSelectable(true) }.also { raiz.addView(it) }
 
         return ScrollView(this).apply { addView(raiz) }
     }
 
+    private fun caixaServidor(raiz: LinearLayout, chave: String, rotulo: String, ajudaTitulo: String, ajuda: () -> String): CheckBox {
+        val cb = CheckBox(this).apply {
+            text = rotulo
+            isChecked = prefs.getBoolean("srv_$chave", true)
+            setOnCheckedChangeListener { _, marcado -> prefs.edit().putBoolean("srv_$chave", marcado).apply() }
+        }
+        raiz.addView(linha(cb, info(ajudaTitulo, ajuda)))
+        return cb
+    }
+
+    // ------------------------------------------------------------------ textos de ajuda
+
+    private fun ipCelular() = Rede.cabo()?.ip ?: "<IP do celular>"
+    private fun ipPs2() = Rede.cabo()?.let { Rede.sugestaoPs2(it.ip) } ?: "<IP do PS2>"
+
+    private fun ajudaRede() = """
+        Ligue o hub (com o cabo no PS2) e ative em Configurações › Conexões › Roteador Wi-Fi e ancoragem › Ancoragem Ethernet. O celular passa a dar IP pelo cabo.
+
+        IP do celular: ${ipCelular()}
+        No PS2: DHCP (OPL) ou IP ${ipPs2()}, máscara 255.255.255.0.
+    """.trimIndent()
+
+    private fun ajudaFonte() = """
+        Pasta: uma pasta do celular ou a raiz do pendrive (exFAT, FAT32 ou NTFS) com DVD/, CD/, ART/… Liga SMB1, UDPFS e UDPBD (o UDPBD vê a pasta como um disco exFAT virtual). No pendrive, o Android pede para você tocar em "Usar esta pasta" uma vez.
+
+        Pendrive inteiro: o app lê o pendrive direto pelo USB (precisa estar em exFAT ou FAT32). Só UDPBD e UDPFS em modo bloco. Ejete o pendrive em Configurações › Armazenamento antes de iniciar; depois de parar, desconecte e reconecte.
+    """.trimIndent()
+
+    private fun ajudaSmb() = """
+        OPL / RiptOPL › Network Settings:
+        • IP Address Type: DHCP (ou ${ipPs2()})
+        • Address: ${ipCelular()}
+        • Port: ${ServidorService.PORTA_SMB}
+        • Share: PS2SMB · User: guest · Password: vazio
+        • ETH Start Mode: Auto; salve e reinicie o OPL.
+    """.trimIndent()
+
+    private fun ajudaUdpfs() = """
+        Mais rápido que o SMB. Serve a pasta (e o disco virtual).
+
+        NHDDL 1.2.2: nhddl.yaml com
+          mode: udpfs
+          udpfs_ip: ${ipPs2()}
+        Neutrino: config/bsd-udpfs.toml → args = ["ip=${ipPs2()}"]
+        RiptOPL: use o mesmo IP do PS2 das configurações de rede.
+    """.trimIndent()
+
+    private fun ajudaUdpbd() = """
+        Bloco: o PS2 vê um disco exFAT (a pasta como disco virtual, ou o pendrive inteiro).
+
+        Neutrino: config/bsd-udpbd.toml → args = ["ip=${ipPs2()}"]
+        RiptOPL / XEB+: dispositivo UDPBD, com o IP do PS2 ${ipPs2()}.
+    """.trimIndent()
+
     // ------------------------------------------------------------------ atualizações
 
     private fun atualizarRede() {
-        val ips = Rede.enderecos()
-        val cabo = ips.firstOrNull { it.cabo }
-        val sb = StringBuilder()
-        if (cabo == null) {
-            sb.append("⚠ Nenhuma rede por cabo.\nConecte o hub (com o cabo no PS2) e ligue em Configurações › Conexões › Roteador Wi-Fi e ancoragem › Ancoragem Ethernet.")
-        } else {
-            sb.append("✔ Cabo (${cabo.nome}): IP do celular ${cabo.ip}\n")
-            sb.append("No PS2 use: IP ${Rede.sugestaoPs2(cabo.ip)}, máscara ${Rede.mascara(cabo.prefixo)} (ou DHCP no OPL)")
-        }
-        val outros = ips.filter { !it.cabo }
-        if (outros.isNotEmpty()) sb.append("\nOutras redes: " + outros.joinToString { "${it.nome} ${it.ip}" })
-        tvRede.text = sb.toString()
-        atualizarAjuda(cabo)
-    }
-
-    private fun atualizarAjuda(cabo: Rede.Ip?) {
-        val ipCel = cabo?.ip ?: "<IP do celular>"
-        val ipPs2 = cabo?.let { Rede.sugestaoPs2(it.ip) } ?: "<IP do PS2>"
-        tvAjuda.text = """
-            OPL (qualquer versão) – modo Pasta, via SMB:
-            • Configurações de rede › Tipo de IP: DHCP (ou IP $ipPs2, máscara 255.255.255.0)
-            • IP do PC (servidor): $ipCel   • Porta: ${ServidorService.PORTA_SMB}
-            • Compartilhamento: PS2SMB   • Usuário: guest   • Senha: vazia
-            • Dispositivo ETH: Automático; salve e reinicie o OPL
-
-            NHDDL 1.2.2 + Neutrino 1.8 (mais rápido) – modo Pasta, via UDPFS:
-            • nhddl.yaml:  mode: udpfs   e   udpfs_ip: $ipPs2
-            • neutrino/config/bsd-udpfs.toml:  args = ["ip=$ipPs2"]
-
-            Neutrino/XEB+ com UDPBD (pasta ou pendrive inteiro):
-            • neutrino/config/bsd-udpbd.toml:  args = ["ip=$ipPs2"]
-        """.trimIndent()
+        val cabo = Rede.cabo()
+        tvRede.text = if (cabo == null) "⚠ Sem rede pelo cabo" else "✔ ${cabo.ip} · PS2: ${Rede.sugestaoPs2(cabo.ip)}"
     }
 
     private fun atualizarPermissoes() {
         val arquivos = Environment.isExternalStorageManager()
         val bateria = getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)
-        btnArquivos.visibility = if (arquivos) View.GONE else View.VISIBLE
+        val pastaInterna = pastaSalva()?.let { !Fonte.ehSaf(it) } == true
+        btnArquivos.visibility = if (arquivos || !pastaInterna) View.GONE else View.VISIBLE
         btnBateria.visibility = if (bateria) View.GONE else View.VISIBLE
-        tvPerm.text = buildString {
-            append(if (arquivos) "✔ Acesso a todos os arquivos" else "⚠ Falta o acesso a todos os arquivos (só necessário para pastas da memória interna)")
-            append("\n")
-            append(if (bateria) "✔ Bateria sem restrição" else "⚠ A economia de bateria pode derrubar o servidor com a tela apagada")
-        }
     }
 
     private fun atualizarVolumes() {
@@ -285,10 +333,10 @@ class MainActivity : Activity() {
             if (v.state != Environment.MEDIA_MOUNTED) continue
             if (v.isPrimary) {
                 val dir = caminhoAcessivel(v) ?: continue
-                listaVolumes.addView(botao("Usar a raiz de: ${v.getDescription(this)}\n$dir") { definirPasta(dir) })
+                listaVolumes.addView(botao("Raiz: ${v.getDescription(this)}") { definirPasta(dir) })
             } else {
-                // Pendrive USB: o Android só libera pelo seletor. Ele abre já na raiz; é só tocar em "Usar esta pasta".
-                listaVolumes.addView(botao("Usar a raiz de: ${v.getDescription(this)} (pendrive)\nno seletor, toque em \"Usar esta pasta\"") {
+                // Pendrive USB: o Android só libera pelo seletor, que abre já na raiz ("Usar esta pasta")
+                listaVolumes.addView(botao("Raiz: ${v.getDescription(this)} (pendrive)") {
                     try {
                         startActivityForResult(v.createOpenDocumentTreeIntent(), REQ_PASTA)
                     } catch (e: Exception) {
@@ -318,7 +366,7 @@ class MainActivity : Activity() {
     private fun mostrarPasta() {
         val pasta = pastaSalva()
         if (pasta == null) {
-            tvPasta.text = "Nenhuma pasta escolhida."
+            tvPasta.text = "Escolha a pasta dos jogos:"
             btnCriarPastas.visibility = View.GONE
             return
         }
@@ -327,14 +375,16 @@ class MainActivity : Activity() {
         val raiz = if (acesso) Fonte.raiz(this, pasta) else null
         val filhos = raiz?.listFiles()
         val temOpl = listOf("DVD", "CD").any { nome -> filhos?.any { it.isDirectory && it.name.equals(nome, true) } == true }
-        tvPasta.text = "Pasta: ${Fonte.descricao(this, pasta)}\n" + when {
-            !acesso && saf -> "⚠ o acesso ao pendrive foi perdido: toque de novo em \"Usar a raiz de…\""
-            !acesso -> "⚠ dê a permissão de arquivos para o app enxergar a pasta"
-            filhos == null -> "⚠ não consegui abrir: toque de novo em \"Usar a raiz de…\" (o pendrive foi desconectado?)"
-            temOpl -> "✔ tem as pastas do OPL (DVD/CD)"
-            else -> "⚠ não achei as pastas DVD/ ou CD/ aqui"
+        val estado = when {
+            !acesso && saf -> "⚠ toque de novo no pendrive abaixo"
+            !acesso -> "⚠ falta a permissão de arquivos"
+            filhos == null -> "⚠ não abriu; escolha de novo"
+            temOpl -> "✔"
+            else -> "⚠ sem DVD/ ou CD/"
         }
+        tvPasta.text = "${Fonte.descricao(this, pasta)}  $estado"
         btnCriarPastas.visibility = if (filhos != null && !temOpl) View.VISIBLE else View.GONE
+        atualizarPermissoes()
     }
 
     private fun atualizarUsb() {
@@ -357,12 +407,19 @@ class MainActivity : Activity() {
         val pasta = rbPasta.isChecked
         painelPasta.visibility = if (pasta) View.VISIBLE else View.GONE
         painelUsb.visibility = if (pasta) View.GONE else View.VISIBLE
+        // No modo bloco não há pasta para o SMB
+        cbSmb.isEnabled = pasta
     }
 
     private fun atualizarEstado() {
-        btnIniciar.text = if (Estado.rodando) "■  Parar servidor" else "▶  Iniciar servidor"
+        btnIniciar.text = if (Estado.rodando) "■  Parar" else "▶  Iniciar"
         tvStatus.text = if (Estado.rodando) "${Estado.resumo}\n$velocidade" else "Parado"
         tvLog.text = Estado.texto()
+        val livre = !Estado.rodando
+        for (cb in listOf(cbUdpfs, cbUdpbd)) cb.isEnabled = livre
+        cbSmb.isEnabled = livre && rbPasta.isChecked
+        rbPasta.isEnabled = livre
+        rbUsb.isEnabled = livre
     }
 
     private fun medirVelocidade() {
@@ -378,28 +435,36 @@ class MainActivity : Activity() {
 
     // ------------------------------------------------------------------ ações
 
+    private fun servidoresEscolhidos(): Set<String> = buildSet {
+        if (cbSmb.isChecked && rbPasta.isChecked) add(ServidorService.SRV_SMB)
+        if (cbUdpfs.isChecked) add(ServidorService.SRV_UDPFS)
+        if (cbUdpbd.isChecked) add(ServidorService.SRV_UDPBD)
+    }
+
     private fun iniciarOuParar() {
         if (Estado.rodando) {
             ServidorService.parar(this)
             return
         }
+        val servidores = servidoresEscolhidos()
+        if (servidores.isEmpty()) return aviso("Marque pelo menos um servidor")
         if (rbPasta.isChecked) {
             val pasta = pastaSalva() ?: return aviso("Escolha uma pasta")
             if (Fonte.ehSaf(pasta)) {
-                if (!Fonte.temPermissao(this, pasta)) return aviso("Toque de novo em \"Usar a raiz de…\" para liberar o pendrive")
+                if (!Fonte.temPermissao(this, pasta)) return aviso("Toque de novo no pendrive para liberar o acesso")
             } else if (!Environment.isExternalStorageManager()) {
-                aviso("Permita o acesso a todos os arquivos primeiro")
+                aviso("Permita o acesso aos arquivos primeiro")
                 abrirPermissaoArquivos()
                 return
             }
             if (Fonte.raiz(this, pasta).listFiles() == null) return aviso("Não consegui abrir a pasta: ${Fonte.descricao(this, pasta)}")
-            ServidorService.iniciar(this, ServidorService.MODO_PASTA, pasta, null)
+            ServidorService.iniciar(this, ServidorService.MODO_PASTA, pasta, null, servidores)
         } else {
             val nome = listaUsb.findViewById<RadioButton>(listaUsb.checkedRadioButtonId)?.tag as? String
                 ?: return aviso("Escolha um pendrive/HD")
             val dev = usb.deviceList[nome] ?: return aviso("Pendrive desconectado").also { atualizarUsb() }
             if (usb.hasPermission(dev)) {
-                ServidorService.iniciar(this, ServidorService.MODO_USB, null, nome)
+                ServidorService.iniciar(this, ServidorService.MODO_USB, null, nome, servidores)
             } else {
                 val pi = PendingIntent.getBroadcast(this, 0, Intent(ACAO_PERMISSAO_USB).setPackage(packageName), PendingIntent.FLAG_MUTABLE)
                 usb.requestPermission(dev, pi)
@@ -449,7 +514,7 @@ class MainActivity : Activity() {
         }
     }
 
-    /** "primary:PS2" -> /storage/emulated/0/PS2 ; "1234-ABCD:PS2" -> /storage/1234-ABCD/PS2 ; "home:PS2" -> .../Documents/PS2 */
+    /** "primary:PS2" -> /storage/emulated/0/PS2 ; "home:PS2" -> .../Documents/PS2 */
     private fun caminhoDaArvore(uri: Uri): String? {
         if (uri.authority != "com.android.externalstorage.documents") return null
         val id = DocumentsContract.getTreeDocumentId(uri)
@@ -458,7 +523,6 @@ class MainActivity : Activity() {
         val base = if (vol.equals("primary", true)) {
             Environment.getExternalStorageDirectory().path
         } else if (vol.equals("home", true)) {
-            // Raiz "Documentos" do seletor (ExternalStorageProvider)
             File(Environment.getExternalStorageDirectory(), Environment.DIRECTORY_DOCUMENTS).path
         } else {
             getSystemService(StorageManager::class.java).storageVolumes

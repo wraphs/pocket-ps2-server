@@ -69,9 +69,10 @@ class ServidorService : Service() {
                 val modo = intent.getStringExtra(EXTRA_MODO) ?: MODO_PASTA
                 val pasta = intent.getStringExtra(EXTRA_PASTA).orEmpty()
                 val usb = intent.getStringExtra(EXTRA_USB).orEmpty()
+                val srv = intent.getStringArrayExtra(EXTRA_SERVIDORES)?.toSet() ?: setOf(SRV_SMB, SRV_UDPFS, SRV_UDPBD)
                 val minha = synchronized(trava) { ++sessao }
                 if (modo == MODO_USB) vigiarDesconexao(usb)
-                Thread({ iniciar(minha, modo, pasta, usb) }, "ps2ponte-inicio").start()
+                Thread({ iniciar(minha, modo, pasta, usb, srv) }, "ps2ponte-inicio").start()
             }
         }
         return START_NOT_STICKY
@@ -86,7 +87,7 @@ class ServidorService : Service() {
         return ok
     }
 
-    private fun iniciar(minha: Int, modo: String, pasta: String, usbNome: String) {
+    private fun iniciar(minha: Int, modo: String, pasta: String, usbNome: String, srv: Set<String>) {
         val log = Estado.eventLog
         val stats = Estado.stats
         try {
@@ -98,13 +99,18 @@ class ServidorService : Service() {
                 if (!raiz.isDirectory) throw IllegalStateException("pasta não encontrada: $nome")
                 val tree = LocalTree(raiz)
                 log.log("Pasta: $nome")
-                novos += SmbServer(tree, port = PORTA_SMB, shareName = "PS2SMB", log = log, stats = stats)
-                log.log("Montando o disco exFAT virtual (para UDPBD)...")
-                val exfat = VirtualExFat.build(raiz, log)
-                if (!guardar(minha, exfat) { dispositivo = exfat }) return
-                log.log("Disco virtual: ${exfat.describe()}")
-                novos += UdpfsServer(tree, exfat, log = log, stats = stats)
-                novos += UdpbdServer(exfat, log = log, stats = stats)
+                if (SRV_SMB in srv) novos += SmbServer(tree, port = PORTA_SMB, shareName = "PS2SMB", log = log, stats = stats)
+                // O disco virtual atende o UDPBD e o modo bloco do UDPFS
+                var exfat: VirtualExFat? = null
+                if (SRV_UDPBD in srv || SRV_UDPFS in srv) {
+                    log.log("Montando o disco exFAT virtual...")
+                    val d = VirtualExFat.build(raiz, log)
+                    if (!guardar(minha, d) { dispositivo = d }) return
+                    log.log("Disco virtual: ${d.describe()}")
+                    exfat = d
+                }
+                if (SRV_UDPFS in srv) novos += UdpfsServer(tree, exfat, log = log, stats = stats)
+                if (SRV_UDPBD in srv) novos += UdpbdServer(exfat!!, log = log, stats = stats)
             } else {
                 val usb = getSystemService(Context.USB_SERVICE) as UsbManager
                 val dev = usb.deviceList[usbNome] ?: throw IllegalStateException("pendrive não encontrado (foi desconectado?)")
@@ -119,8 +125,8 @@ class ServidorService : Service() {
                     "NTFS" in sistemas -> log.log("⚠ Pendrive em NTFS: no modo bloco o PS2 só lê exFAT/FAT32. Use o modo Pasta (funciona com NTFS) ou formate em exFAT.")
                     sistemas.isEmpty() -> log.log("⚠ Não reconheci exFAT/FAT32 neste disco; o PS2 pode não enxergar os jogos no modo bloco.")
                 }
-                novos += UdpbdServer(bd, log = log, stats = stats)
-                novos += UdpfsServer(null, bd, log = log, stats = stats)
+                if (SRV_UDPBD in srv) novos += UdpbdServer(bd, log = log, stats = stats)
+                if (SRV_UDPFS in srv) novos += UdpfsServer(null, bd, log = log, stats = stats)
             }
 
             val ligados = mutableListOf<String>()
@@ -240,12 +246,17 @@ class ServidorService : Service() {
         const val EXTRA_USB = "usb"
         const val MODO_PASTA = "pasta"
         const val MODO_USB = "usb"
+        const val EXTRA_SERVIDORES = "servidores"
+        const val SRV_SMB = "smb"
+        const val SRV_UDPFS = "udpfs"
+        const val SRV_UDPBD = "udpbd"
         const val PORTA_SMB = 1445
         private const val CANAL = "servidor"
 
-        fun iniciar(ctx: Context, modo: String, pasta: String?, usb: String?) {
+        fun iniciar(ctx: Context, modo: String, pasta: String?, usb: String?, servidores: Set<String>) {
             val i = Intent(ctx, ServidorService::class.java).setAction(ACAO_INICIAR)
                 .putExtra(EXTRA_MODO, modo).putExtra(EXTRA_PASTA, pasta).putExtra(EXTRA_USB, usb)
+                .putExtra(EXTRA_SERVIDORES, servidores.toTypedArray())
             ctx.startForegroundService(i)
         }
 

@@ -41,6 +41,9 @@ class UdpfsServer(
     @Volatile private var sock: DatagramSocket? = null
     @Volatile private var dsock: DatagramSocket? = null
     @Volatile private var lastPeer: String? = null
+    @Volatile private var aguardandoPedido = false
+    private var listouAlgo = false
+    private var leuBloco = false
 
     // Estado do protocolo (só a thread de dados mexe)
     private var txSeq = 0
@@ -112,8 +115,9 @@ class UdpfsServer(
                 val ip = p.address.hostAddress
                 if (ip != lastPeer) {
                     lastPeer = ip
-                    log.log("UDPFS: PS2 $ip conectado")
+                    log.log("UDPFS: PS2 $ip procurou o servidor; respondendo para ${router.targets(addr).joinToString { it.address.hostAddress ?: "" }}")
                 }
+                aguardandoPedido = true
                 // INFORM sai do socket de dados: o PS2 aprende a porta pela porta de origem.
                 val inform = ByteArray(6)
                 putU16(inform, 0, PT_INFORM or (1 shl 4)) // seq do INFORM é sempre 1
@@ -194,6 +198,10 @@ class UdpfsServer(
         // ACK imediato: o udprdma_send() do PS2 volta logo e espera a resposta com 5 s
         sendAck(d, addr, true)
         if (payload.isEmpty()) return
+        if (aguardandoPedido) {
+            aguardandoPedido = false
+            log.log("UDPFS: conexão estabelecida, primeiro pedido recebido")
+        }
 
         when (payload[0].toInt() and 0xFF) {
             OPEN_REQ -> handleOpen(d, addr, payload)
@@ -456,6 +464,10 @@ class UdpfsServer(
             if (!f.exists()) return sendOpenReply(d, addr, -ENOENT)
             val list = f.listFiles()
             if (!f.isDirectory || list == null) return sendOpenReply(d, addr, -ENOTDIR)
+            if (!listouAlgo) {
+                listouAlgo = true
+                log.log("UDPFS: PS2 listando a pasta (${path.ifEmpty { "/" }})")
+            }
             val id = allocHandle(Handle.DirH(list.sortedBy { it.name.lowercase() }))
             return sendOpenReply(d, addr, id, if (id >= 0) Stat.of(f) else null)
         }
@@ -702,6 +714,10 @@ class UdpfsServer(
         try {
             when (h) {
                 is Handle.BlockH -> {
+                    if (!leuBloco) {
+                        leuBloco = true
+                        log.log("UDPFS: PS2 lendo o disco virtual (modo bloco)")
+                    }
                     val dev = device!!
                     val n = maxOf(0L, minOf(count.toLong(), dev.sectorCount - sector)).toInt()
                     val buf = ByteArray(n * dev.sectorSize)

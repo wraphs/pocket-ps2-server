@@ -33,6 +33,7 @@ class UdpbdServer(
     @Volatile private var socket: DatagramSocket? = null
     @Volatile private var running = false
     private var lastPeer: String? = null
+    private var leuDesdeInfo = false
 
     // Estado da escrita em andamento
     private var wCmdId = -1
@@ -101,8 +102,9 @@ class UdpbdServer(
         val ip = peer.address.hostAddress
         if (ip != lastPeer) {
             lastPeer = ip
-            log.log("UDPBD: PS2 $ip conectado (${count * 512 / (1024 * 1024)} MiB)")
+            log.log("UDPBD: PS2 $ip pediu o disco (${count * 512 / (1024 * 1024)} MiB); respondendo para ${router.targets(peer).joinToString { it.address.hostAddress ?: "" }}")
         }
+        leuDesdeInfo = false
         val r = ByteArray(10)
         putU16(r, 0, header(CMD_INFO_REPLY, cmdId, 1))
         putU32(r, 2, 512L)
@@ -112,6 +114,10 @@ class UdpbdServer(
 
     private fun handleRead(s: DatagramSocket, cmdId: Int, lba: Long, count: Int, peer: InetSocketAddress) {
         if (count <= 0) return
+        if (!leuDesdeInfo) {
+            leuDesdeInfo = true
+            log.log("UDPBD: PS2 começou a ler o disco")
+        }
         val data = ByteArray(count * 512)
         try {
             device.read(lba, count, data, 0)

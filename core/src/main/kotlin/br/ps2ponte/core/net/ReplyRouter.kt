@@ -8,10 +8,12 @@ import java.net.NetworkInterface
 /**
  * Decide para onde mandar as respostas UDP ao PS2.
  *
- * Se o IP do PS2 está numa sub-rede de alguma interface do celular, responde direto (unicast).
- * Se não está (ex.: Neutrino com o IP padrão 192.168.1.10 e o celular em 192.168.x.1), responde em
- * broadcast pela(s) interface(s) cabeada(s): a pilha do PS2 (ministack) não confere o IP de destino,
- * só a porta, então o pacote chega. Sem isso o Android mandaria a resposta pela rede móvel.
+ * Responde em broadcast da sub-rede do cabo (ex.: 192.168.2.255), não em unicast. No Android, um socket
+ * UDP de app não é amarrado a nenhuma rede: o unicast para o PS2 sai pela rede padrão (Wi-Fi/dados) e
+ * se perde, enquanto o TCP do SMB funciona porque herda a interface da conexão que chegou. Visto no S25:
+ * o PS2 descobria o servidor (broadcast chega) e nada mais acontecia. O broadcast de sub-rede é
+ * resolvido pela tabela "local" do Linux, antes das regras do Android, e sai sempre pela interface certa.
+ * A pilha do PS2 (ministack) não confere o IP de destino, só a porta.
  */
 class ReplyRouter(private val interfaces: () -> List<Subnet> = ::localSubnets) {
 
@@ -35,19 +37,17 @@ class ReplyRouter(private val interfaces: () -> List<Subnet> = ::localSubnets) {
         return cache
     }
 
-    /** Destinos para a resposta: o próprio PS2, ou os broadcasts das interfaces cabeadas. */
+    /** Destinos para a resposta (um só, para o PS2 não receber pacotes duplicados). */
     fun targets(peer: InetSocketAddress): List<InetSocketAddress> {
         val ip = peer.address as? Inet4Address ?: return listOf(peer)
         if (ip.isLoopbackAddress) return listOf(peer)
-        val nets = subnets()
-        if (nets.isEmpty() || nets.any { isWired(it.ifName) && it.contains(ip) }) return listOf(peer)
-        val wired = nets.filter { isWired(it.ifName) && it.broadcast != null }
-        if (wired.isEmpty()) return listOf(peer)
-        val broadcasts = wired.map { InetSocketAddress(it.broadcast, peer.port) }
-        // IP dentro da sub-rede de outra interface (ex.: Wi-Fi de casa em 192.168.1.x e o PS2 no cabo com o
-        // IP padrão 192.168.1.10): o unicast sairia pelo Wi-Fi. Sem saber por onde o pacote chegou, responde
-        // pelos dois caminhos; só um deles chega ao PS2.
-        return if (nets.any { it.contains(ip) }) listOf(peer) + broadcasts else broadcasts
+        val nets = subnets().filter { it.broadcast != null }
+        val wired = nets.filter { isWired(it.ifName) }
+        // 1) sub-rede do cabo que contém o PS2; 2) qualquer cabo (IP do PS2 fora da sub-rede, ex.: o padrão
+        // do Neutrino 192.168.1.10); 3) outra interface que contenha o PS2; 4) unicast.
+        val alvo = wired.filter { it.contains(ip) }.ifEmpty { wired }.ifEmpty { nets.filter { it.contains(ip) } }
+        if (alvo.isEmpty()) return listOf(peer)
+        return alvo.map { InetSocketAddress(it.broadcast, peer.port) }.distinct()
     }
 
     companion object {
