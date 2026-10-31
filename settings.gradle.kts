@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "ps2-ponte"
+rootProject.name = "pocket-ps2-server"
 include(":core", ":app")
