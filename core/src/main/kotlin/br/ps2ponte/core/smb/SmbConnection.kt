@@ -1,5 +1,6 @@
 package br.ps2ponte.core.smb
 
+import br.ps2ponte.core.t
 import br.ps2ponte.core.fs.VFile
 import br.ps2ponte.core.fs.VHandle
 import java.io.BufferedInputStream
@@ -84,8 +85,9 @@ internal class SmbConnection(private val srv: SmbServer, private val sock: Socke
             }
         } catch (e: IOException) {
             // conexão caiu
+            srv.log(t("SMB: $ip desconectou (${e.javaClass.simpleName})", "SMB: $ip disconnected (${e.javaClass.simpleName})"))
         } catch (e: RuntimeException) {
-            srv.log("SMB: erro com $ip: $e")
+            srv.log(t("SMB: erro com $ip: $e", "SMB: error with $ip: $e"))
         } finally {
             cleanup()
         }
@@ -127,9 +129,10 @@ internal class SmbConnection(private val srv: SmbServer, private val sock: Socke
         val n = req.len
         val b = req.b
         if (n < 35 || b[0] != 0xFF.toByte() || b[1] != 'S'.code.toByte() || b[2] != 'M'.code.toByte() || b[3] != 'B'.code.toByte()) {
-            if (n >= 4 && b[0] == 0xFE.toByte()) srv.log("SMB: $ip tentou SMB2 (só SMB1 é suportado)")
+            if (n >= 4 && b[0] == 0xFE.toByte()) srv.log(t("SMB: $ip tentou SMB2 (só SMB1 é suportado)", "SMB: $ip tried SMB2 (only SMB1 is supported)"))
             return false
         }
+        srv.statsRef.request(ip)
         val cmd = req.u8(4)
         flags2 = req.u16(10)
         uni = (flags2 and Flags2.UNICODE) != 0
@@ -241,7 +244,13 @@ internal class SmbConnection(private val srv: SmbServer, private val sock: Socke
     }
 
     private fun readAt(h: VHandle, pos: Long, buf: ByteArray, off: Int, n: Int) {
-        val done = h.readFully(pos, buf, off, n)
+        // Uma nova tentativa cobre a oscilação de um instante do pendrive/SAF; sem ela a conexão cai e o OPL não reconecta
+        val done = try {
+            h.readFully(pos, buf, off, n)
+        } catch (e: IOException) {
+            Thread.sleep(150)
+            h.readFully(pos, buf, off, n)
+        }
         // arquivo encolheu: completa com zeros para manter o fluxo
         if (done < n) java.util.Arrays.fill(buf, off + maxOf(done, 0), off + n, 0)
     }
@@ -449,7 +458,7 @@ internal class SmbConnection(private val srv: SmbServer, private val sock: Socke
             if (!used(id)) return id
             id++
         }
-        throw IOException("sem identificadores livres")
+        throw IOException(t("sem identificadores livres", "no free handles"))
     }
 
     // ---------------------------------------------------------------- TRANS (IPC$) e TRANS2
@@ -962,7 +971,7 @@ internal class SmbConnection(private val srv: SmbServer, private val sock: Socke
         nextFid = fid + 1
         files[fid] = OpenFile(fid, t.tid, curUid, f, path, handle, dir, write, delOnClose)
         chainFid = fid
-        if (!dir) srv.log("SMB: $ip abriu ${displayPath(path)}")
+        if (!dir) srv.log(t("SMB: $ip abriu ${displayPath(path)}", "SMB: $ip opened ${displayPath(path)}"))
         return St.SUCCESS
     }
 

@@ -1,5 +1,6 @@
 package br.ps2ponte.core.block
 
+import br.ps2ponte.core.t
 import java.io.Closeable
 import java.io.File
 import java.io.IOException
@@ -40,14 +41,14 @@ class FileBlockDevice(file: File, override val readOnly: Boolean = false) : Bloc
     }
 
     override fun write(lba: Long, count: Int, buf: ByteArray, off: Int) = synchronized(raf) {
-        if (readOnly) throw IOException("somente leitura")
+        if (readOnly) throw IOException(t("somente leitura", "read-only"))
         checkRange(lba, count)
         raf.seek(lba * 512)
         raf.write(buf, off, count * 512)
     }
 
     private fun checkRange(lba: Long, count: Int) {
-        if (lba < 0 || count < 0 || lba + count > sectorCount) throw IOException("setor fora do disco: $lba+$count")
+        if (lba < 0 || count < 0 || lba + count > sectorCount) throw IOException(t("setor fora do disco: $lba+$count", "sector outside the disk: $lba+$count"))
     }
 
     override fun close() = raf.close()

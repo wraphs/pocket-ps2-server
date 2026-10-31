@@ -1,5 +1,6 @@
 package br.ps2ponte.core.exfat
 
+import br.ps2ponte.core.t
 import br.ps2ponte.core.fs.VHandle
 import java.io.IOException
 
@@ -18,14 +19,14 @@ internal class FileHandles(private val max: Int) {
     private var closed = false
 
     fun acquire(n: Node, write: Boolean): H = synchronized(this) {
-        if (closed) throw IOException("disco fechado")
+        if (closed) throw IOException(t("disco fechado", "disk closed"))
         val cur = map[n]
         if (cur != null && (cur.writable || !write)) {
             cur.users++
             return cur
         }
         // open(true) cria o arquivo se ele sumiu; aí a gravação não deve acontecer.
-        if (write && !n.file.exists()) throw IOException("arquivo não existe mais")
+        if (write && !n.file.exists()) throw IOException(t("arquivo não existe mais", "file no longer exists"))
         val h = H(n.file.open(write), write)
         if (cur != null) {
             map.remove(n)

@@ -1,5 +1,6 @@
 package br.ps2ponte.core.exfat
 
+import br.ps2ponte.core.t
 import br.ps2ponte.core.EventLog
 import br.ps2ponte.core.fs.VFile
 import java.io.IOException
@@ -87,7 +88,7 @@ internal class TreeSnapshot(rootDir: VFile, private val log: EventLog, private v
 
     init {
         val isDir = try { rootDir.isDirectory } catch (e: Exception) { false }
-        if (!isDir) throw IOException("não é uma pasta: ${rootDir.path}")
+        if (!isDir) throw IOException(t("não é uma pasta: ${rootDir.path}", "not a folder: ${rootDir.path}"))
         root = Node("", rootDir, true, 0, ExFat.timestamp(rootDir.lastModified(), tz))
         // Trabalho de E/S (stat, consulta IPC do SAF): mais threads que núcleos ajuda.
         val threads = (Runtime.getRuntime().availableProcessors() * 2).coerceIn(2, THREADS_MAX)
@@ -101,7 +102,7 @@ internal class TreeSnapshot(rootDir: VFile, private val log: EventLog, private v
                 val listings = parallelMap(pool, level) { d ->
                     try { d.file.listFiles() } catch (e: Exception) { null }
                 }
-                if (depth == 0 && listings[0] == null) throw IOException("não consegui ler a pasta ${rootDir.path}")
+                if (depth == 0 && listings[0] == null) throw IOException(t("não consegui ler a pasta ${rootDir.path}", "could not read folder ${rootDir.path}"))
                 // 2) Atributos de todos os itens do nível.
                 val items = ArrayList<Item>()
                 val start = IntArray(level.size + 1)
@@ -127,7 +128,7 @@ internal class TreeSnapshot(rootDir: VFile, private val log: EventLog, private v
         } finally {
             pool?.shutdownNow()
         }
-        if (skipped > logged) log.log("exFAT virtual: ${skipped - logged} outros itens ignorados")
+        if (skipped > logged) log.log(t("exFAT virtual: ${skipped - logged} outros itens ignorados", "Virtual exFAT: ${skipped - logged} more items skipped"))
     }
 
     private fun addChildren(node: Node, items: List<Item>, depth: Int, next: MutableList<Node>) {
@@ -135,8 +136,8 @@ internal class TreeSnapshot(rootDir: VFile, private val log: EventLog, private v
         for (it in items) {
             val p = it.problem
             if (p != null) { skip(it.file.path, p); continue }
-            if (it.isDir && depth + 1 > MAX_DEPTH) { skip(it.file.path, "profundidade"); continue }
-            if (++entries > MAX_ENTRIES) { skip(it.file.path, "itens demais"); continue }
+            if (it.isDir && depth + 1 > MAX_DEPTH) { skip(it.file.path, t("profundidade", "too deep")); continue }
+            if (++entries > MAX_ENTRIES) { skip(it.file.path, t("itens demais", "too many items")); continue }
             val n = Node(it.name, it.file, it.isDir, it.size, ExFat.timestamp(it.mtime, tz))
             list.add(ExFat.upperName(it.name) to n)
         }
@@ -147,7 +148,7 @@ internal class TreeSnapshot(rootDir: VFile, private val log: EventLog, private v
         val kids = ArrayList<Node>(list.size)
         var prev: String? = null
         for ((key, n) in list) {
-            if (key == prev) { skip(n.file.path, "nome repetido sem diferenciar maiúsculas"); continue }
+            if (key == prev) { skip(n.file.path, t("nome repetido sem diferenciar maiúsculas", "same name ignoring case")); continue }
             prev = key
             n.parent = node
             kids.add(n)
@@ -160,7 +161,7 @@ internal class TreeSnapshot(rootDir: VFile, private val log: EventLog, private v
         skipped++
         if (logged < 20) {
             logged++
-            log.log("exFAT virtual: ignorado ($why): $path")
+            log.log(t("exFAT virtual: ignorado ($why): $path", "Virtual exFAT: skipped ($why): $path"))
         }
     }
 

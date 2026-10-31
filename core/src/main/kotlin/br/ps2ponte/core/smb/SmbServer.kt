@@ -1,5 +1,6 @@
 package br.ps2ponte.core.smb
 
+import br.ps2ponte.core.t
 import br.ps2ponte.core.EventLog
 import br.ps2ponte.core.NoLog
 import br.ps2ponte.core.PonteServer
@@ -76,8 +77,8 @@ class SmbServer(
             } catch (e: IOException) {
             }
             val ip = s.inetAddress?.hostAddress ?: "?"
-            log("SMB: $ip conectou")
-            val t = thread(start = false, isDaemon = true, name = "smb-$ip") {
+            log(t("SMB: $ip conectou", "SMB: $ip connected"))
+            val t = thread(start = false, isDaemon = true, name = "smb-$ip", priority = Thread.MAX_PRIORITY) {
                 try {
                     SmbConnection(this, s, ip).run()
                 } finally {

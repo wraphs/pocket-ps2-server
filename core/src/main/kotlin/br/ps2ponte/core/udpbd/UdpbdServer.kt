@@ -1,5 +1,6 @@
 package br.ps2ponte.core.udpbd
 
+import br.ps2ponte.core.t
 import br.ps2ponte.core.EventLog
 import br.ps2ponte.core.NoLog
 import br.ps2ponte.core.PonteServer
@@ -58,7 +59,7 @@ class UdpbdServer(
         }
         socket = s
         running = true
-        Thread({ loop(s) }, "udpbd").apply { isDaemon = true; start() }
+        Thread({ loop(s) }, "udpbd").apply { isDaemon = true; priority = Thread.MAX_PRIORITY; start() }
     }
 
     override fun close() {
@@ -79,16 +80,17 @@ class UdpbdServer(
                 // Só para se o socket foi fechado (Parar). "Rede inalcançável" ao enviar acontece quando o
                 // adaptador do hub cai por um instante: continua atendendo quando ele voltar.
                 if (!running || s.isClosed) break
-                log.log("UDPBD: rede indisponível (${e.message}); continuando")
+                log.log(t("UDPBD: rede indisponível (${e.message}); continuando", "UDPBD: network unavailable (${e.message}); continuing"))
                 Thread.sleep(200)
             } catch (e: Exception) {
-                log.log("UDPBD: erro: ${e.message}")
+                log.log(t("UDPBD: erro: ${e.message}", "UDPBD: error: ${e.message}"))
             }
         }
     }
 
     private fun handle(s: DatagramSocket, buf: ByteArray, len: Int, peer: InetSocketAddress) {
         if (len < 2) return
+        stats.request(peer.address.hostAddress)
         val hdr = u16(buf, 0)
         val cmd = hdr and 0x1F
         val cmdId = (hdr shr 5) and 0x7
@@ -105,7 +107,7 @@ class UdpbdServer(
         val ip = peer.address.hostAddress
         if (ip != lastPeer) {
             lastPeer = ip
-            log.log("UDPBD: PS2 $ip pediu o disco (${count * 512 / (1024 * 1024)} MiB); respondendo para ${router.targets(peer).joinToString { it.address.hostAddress ?: "" }}")
+            log.log(t("UDPBD: PS2 $ip pediu o disco (${count * 512 / (1024 * 1024)} MiB); respondendo para ${router.targets(peer).joinToString { it.address.hostAddress ?: "" }}", "UDPBD: PS2 $ip asked for the disk (${count * 512 / (1024 * 1024)} MiB); replying to ${router.targets(peer).joinToString { it.address.hostAddress ?: "" }}"))
         }
         leuDesdeInfo = false
         val r = ByteArray(10)
@@ -119,14 +121,14 @@ class UdpbdServer(
         if (count <= 0) return
         if (!leuDesdeInfo) {
             leuDesdeInfo = true
-            log.log("UDPBD: PS2 começou a ler o disco")
+            log.log(t("UDPBD: PS2 começou a ler o disco", "UDPBD: PS2 started reading the disk"))
         }
         val data = ByteArray(count * 512)
         try {
             device.read(lba, count, data, 0)
         } catch (e: IOException) {
             // Sem resposta: o PS2 tenta de novo (até 4 vezes) e depois desconecta.
-            log.log("UDPBD: erro ao ler setor $lba (+$count): ${e.message}")
+            log.log(t("UDPBD: erro ao ler setor $lba (+$count): ${e.message}", "UDPBD: error reading sector $lba (+$count): ${e.message}"))
             return
         }
         stats.bytesRead.addAndGet(data.size.toLong())
@@ -164,7 +166,7 @@ class UdpbdServer(
     private fun handleWriteRdma(s: DatagramSocket, buf: ByteArray, len: Int, cmdId: Int, cmdPkt: Int, peer: InetSocketAddress) {
         if (cmdId != wCmdId || wPos >= wBuf.size) return
         if (cmdPkt != (wNextPkt and 0xFF)) {
-            log.log("UDPBD: pacote de escrita perdido (esperado ${wNextPkt and 0xFF}, veio $cmdPkt); escrita descartada")
+            log.log(t("UDPBD: pacote de escrita perdido (esperado ${wNextPkt and 0xFF}, veio $cmdPkt); escrita descartada", "UDPBD: write packet lost (expected ${wNextPkt and 0xFF}, got $cmdPkt); write discarded"))
             wCmdId = -1
             return
         }
@@ -184,7 +186,7 @@ class UdpbdServer(
                 0
             }
         } catch (e: IOException) {
-            log.log("UDPBD: erro ao gravar setor $wLba (+$wCount): ${e.message}")
+            log.log(t("UDPBD: erro ao gravar setor $wLba (+$wCount): ${e.message}", "UDPBD: error writing sector $wLba (+$wCount): ${e.message}"))
             -5 // EIO
         }
         val r = ByteArray(6)

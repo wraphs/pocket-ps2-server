@@ -1,5 +1,6 @@
 package br.ps2ponte.core.exfat
 
+import br.ps2ponte.core.t
 import br.ps2ponte.core.EventLog
 import br.ps2ponte.core.NoLog
 import br.ps2ponte.core.block.BlockDevice
@@ -116,8 +117,9 @@ class VirtualExFat private constructor(
             val dev = VirtualExFat(snap, lay, log, overlayLimitBytes, serial)
             val ms = (System.nanoTime() - t0) / 1_000_000
             log.log(
-                "exFAT virtual: ${dev.describe()} (montado em $ms ms; disco de ${gib(dev.sectorCount * SECTOR)} GiB, " +
-                    "${gib(lay.freeClusters.toLong() * CLUSTER_BYTES)} GiB livres)"
+                t("exFAT virtual: ${dev.describe()} (montado em $ms ms; disco de ${gib(dev.sectorCount * SECTOR)} GiB, " +
+                    "${gib(lay.freeClusters.toLong() * CLUSTER_BYTES)} GiB livres)", "Virtual exFAT: ${dev.describe()} (built in $ms ms; ${gib(dev.sectorCount * SECTOR)} GiB disk, " +
+                    "${gib(lay.freeClusters.toLong() * CLUSTER_BYTES)} GiB free)")
             )
             return dev
         }
@@ -342,7 +344,7 @@ class VirtualExFat private constructor(
                 }
                 if (keep[s] && !overlay.containsKey(sec)) added++
             }
-            if ((overlay.size.toLong() + added) * SECTOR > overlayLimitBytes) throw IOException("camada de escrita cheia")
+            if ((overlay.size.toLong() + added) * SECTOR > overlayLimitBytes) throw IOException(t("camada de escrita cheia", "write overlay full"))
 
             // 2) Grava: trechos seguidos do mesmo arquivo numa gravação só.
             var s = 0
@@ -367,7 +369,7 @@ class VirtualExFat private constructor(
                 } else {
                     for (k in s until e) {
                         if (!overlay.containsKey(lba + k) && (overlay.size.toLong() + 1) * SECTOR > overlayLimitBytes) {
-                            throw IOException("camada de escrita cheia")
+                            throw IOException(t("camada de escrita cheia", "write overlay full"))
                         }
                         store(lba + k, buf, off + k * SECTOR, true)
                     }
@@ -388,15 +390,31 @@ class VirtualExFat private constructor(
     }
 
     private fun writeThrough(n: Node, pos: Long, buf: ByteArray, off: Int, len: Int): Boolean {
-        return try {
-            handles.write(n, pos, buf, off, len)
-            true
-        } catch (e: Exception) {
-            if (e is IOException && closed) throw e
-            n.noWriteThrough = true
-            log.log("exFAT virtual: não consegui gravar em ${n.file.path} (${e.message}); as gravações dele ficam só na memória")
-            false
+        // Até 3 tentativas em ~0,6 s (abaixo do tempo que o PS2 espera): um pendrive que oscilou por um
+        // instante não pode mandar os saves desse arquivo para a memória até o fim da sessão
+        var tentativa = 0
+        while (true) {
+            try {
+                handles.write(n, pos, buf, off, len)
+                return true
+            } catch (e: Exception) {
+                if (e is IOException && closed) throw e
+                if (++tentativa < 3) {
+                    Thread.sleep(300)
+                    continue
+                }
+                return desistirDeGravar(n, e)
+            }
         }
+    }
+
+    private fun desistirDeGravar(n: Node, e: Exception): Boolean {
+        n.noWriteThrough = true
+        log.log(t(
+            "⚠ exFAT virtual: não consegui gravar em ${n.file.path} (${e.message}); as gravações dele ficam só na memória e se perdem ao parar",
+            "⚠ Virtual exFAT: could not write to ${n.file.path} (${e.message}); its writes stay in memory only and are lost on stop",
+        ))
+        return false
     }
 
     /**
@@ -423,7 +441,7 @@ class VirtualExFat private constructor(
             val e = k.entryOffset.toLong()
             if (changed(dir, e, pos, data, off) || (0 until 12).any { changed(dir, e + ENTRY + 20 + it, pos, data, off) }) {
                 k.detached = true
-                log.log("exFAT virtual: o PS2 alterou ${k.name}; as próximas gravações nele ficam só na memória")
+                log.log(t("exFAT virtual: o PS2 alterou ${k.name}; as próximas gravações nele ficam só na memória", "Virtual exFAT: PS2 changed ${k.name}; further writes to it stay in memory only"))
             }
         }
     }
@@ -439,8 +457,8 @@ class VirtualExFat private constructor(
     }
 
     private fun check(lba: Long, count: Int) {
-        if (closed) throw IOException("disco fechado")
-        if (lba < 0 || count < 0 || lba + count > sectorCount) throw IOException("setor fora do disco: $lba+$count")
+        if (closed) throw IOException(t("disco fechado", "disk closed"))
+        if (lba < 0 || count < 0 || lba + count > sectorCount) throw IOException(t("setor fora do disco: $lba+$count", "sector outside the disk: $lba+$count"))
     }
 
     // flush(): nada a fazer; as gravações diretas já foram entregues ao VHandle (que não tem sync).
@@ -580,7 +598,7 @@ internal class Layout(
                 for (c in d.children) {
                     c.entryOffset = used
                     used += ExFat.entryCount(c.name) * ENTRY
-                    if (used > MAX_DIR_BYTES - cb) throw IOException("pasta com itens demais para o exFAT: ${d.file.path}")
+                    if (used > MAX_DIR_BYTES - cb) throw IOException(t("pasta com itens demais para o exFAT: ${d.file.path}", "folder has too many items for exFAT: ${d.file.path}"))
                 }
                 d.dirUsed = used
                 d.clusters = (ceilDiv(used.toLong(), cb) + 1).toInt()
@@ -600,7 +618,7 @@ internal class Layout(
                 )
             }
             if (free < wantFree) {
-                log.log("exFAT virtual: espaço livre virtual reduzido para ${VirtualExFat.gib(free * cb)} GiB (limite de 2 TiB do disco)")
+                log.log(t("exFAT virtual: espaço livre virtual reduzido para ${VirtualExFat.gib(free * cb)} GiB (limite de 2 TiB do disco)", "Virtual exFAT: virtual free space reduced to ${VirtualExFat.gib(free * cb)} GiB (2 TiB disk limit)"))
             }
             val sz = sizes(data, free)
 

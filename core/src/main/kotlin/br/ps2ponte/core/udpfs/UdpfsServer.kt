@@ -1,5 +1,6 @@
 package br.ps2ponte.core.udpfs
 
+import br.ps2ponte.core.t
 import br.ps2ponte.core.EventLog
 import br.ps2ponte.core.NoLog
 import br.ps2ponte.core.PonteServer
@@ -51,6 +52,14 @@ class UdpfsServer(
     private var rxSeqExpected = 0
     private var txBuffer = ArrayList<Pair<Int, ByteArray>>()
 
+    // Pedido que chegou enquanto a thread esperava um ACK (com o ACK "de carona"): é tratado logo depois,
+    // em vez de descartado (o PS2 só repetiria depois de 5 s)
+    private var pendente: Pair<ByteArray, InetSocketAddress>? = null
+
+    // Destinos da resposta para o último endereço (o ReplyRouter consulta as interfaces; não precisa a cada pacote)
+    private class Alvos(val de: InetSocketAddress, val para: List<InetSocketAddress>, val em: Long)
+    @Volatile private var alvos: Alvos? = null
+
     private sealed class Handle {
         class FileH(val io: VHandle, val append: Boolean, var pos: Long = 0) : Handle()
         class DirH(val entries: List<VFile>, var index: Int = 0) : Handle()
@@ -79,7 +88,8 @@ class UdpfsServer(
             d.broadcast = true
             d.receiveBufferSize = 1 shl 20
             d.sendBufferSize = 1 shl 20
-            d.bind(InetSocketAddress(0))
+            // Porta de dados fixa quando dá: se o serviço reiniciar, o PS2 que já conhecia a porta continua achando
+            try { d.bind(InetSocketAddress(port + 1)) } catch (e: SocketException) { d.bind(InetSocketAddress(0)) }
         } catch (e: Exception) {
             s.close(); d.close()
             throw e
@@ -89,7 +99,7 @@ class UdpfsServer(
         dsock = d
         running = true
         Thread({ discoveryLoop(s, d) }, "udpfs-disc").apply { isDaemon = true; start() }
-        Thread({ dataLoop(d) }, "udpfs-data").apply { isDaemon = true; start() }
+        Thread({ dataLoop(d) }, "udpfs-data").apply { isDaemon = true; priority = Thread.MAX_PRIORITY; start() }
     }
 
     override fun close() {
@@ -113,9 +123,10 @@ class UdpfsServer(
                 if (u16(buf, 2) != SERVICE_ID) continue
                 val addr = InetSocketAddress(p.address, p.port)
                 val ip = p.address.hostAddress
+                stats.request(ip)
                 if (ip != lastPeer) {
                     lastPeer = ip
-                    log.log("UDPFS: PS2 $ip procurou o servidor; respondendo para ${router.targets(addr).joinToString { it.address.hostAddress ?: "" }}")
+                    log.log(t("UDPFS: PS2 $ip procurou o servidor; respondendo para ${router.targets(addr).joinToString { it.address.hostAddress ?: "" }}", "UDPFS: PS2 $ip is looking for the server; replying to ${router.targets(addr).joinToString { it.address.hostAddress ?: "" }}"))
                 }
                 aguardandoPedido = true
                 // INFORM sai do socket de dados: o PS2 aprende a porta pela porta de origem.
@@ -129,7 +140,7 @@ class UdpfsServer(
                 if (!running || s.isClosed || d.isClosed) break
                 Thread.sleep(200)
             } catch (e: Exception) {
-                log.log("UDPFS: erro na descoberta: ${e.message}")
+                log.log(t("UDPFS: erro na descoberta: ${e.message}", "UDPFS: discovery error: ${e.message}"))
             }
         }
     }
@@ -139,16 +150,21 @@ class UdpfsServer(
         val p = DatagramPacket(buf, buf.size)
         while (running) {
             try {
+                val pend = pendente
+                if (pend != null) {
+                    pendente = null
+                    handleData(d, pend.first, pend.second)
+                    continue
+                }
                 p.setData(buf, 0, buf.size)
-                d.soTimeout = 0
-                d.receive(p)
+                d.receive(p) // o soTimeout volta a 0 no finally de cada espera de ACK
                 handleData(d, buf.copyOf(p.length), InetSocketAddress(p.address, p.port))
             } catch (e: SocketException) {
                 if (!running || d.isClosed) break
-                log.log("UDPFS: rede indisponível (${e.message}); continuando")
+                log.log(t("UDPFS: rede indisponível (${e.message}); continuando", "UDPFS: network unavailable (${e.message}); continuing"))
                 Thread.sleep(200)
             } catch (e: Exception) {
-                log.log("UDPFS: erro: ${e.message}")
+                log.log(t("UDPFS: erro: ${e.message}", "UDPFS: error: ${e.message}"))
             }
         }
         synchronized(handles) {
@@ -161,6 +177,7 @@ class UdpfsServer(
 
     private fun handleData(d: DatagramSocket, data: ByteArray, addr: InetSocketAddress) {
         if (data.size < 6) return
+        stats.request(addr.address.hostAddress)
         val h = u16(data, 0)
         if (h and 0xF != PT_DATA) return
         val seq = (h shr 4) and 0xFFF
@@ -192,6 +209,7 @@ class UdpfsServer(
             } else if (seq == 0) {
                 // O PS2 recomeçou a conexão (ex.: reboot do IOP)
                 txSeq = 0; txBuffer = ArrayList(); txSeqAcked = 0; rxSeqExpected = 0
+                fecharHandlesDaSessao()
             } else {
                 sendAck(d, addr, false)
                 return
@@ -204,7 +222,7 @@ class UdpfsServer(
         if (payload.isEmpty()) return
         if (aguardandoPedido) {
             aguardandoPedido = false
-            log.log("UDPFS: conexão estabelecida, primeiro pedido recebido")
+            log.log(t("UDPFS: conexão estabelecida, primeiro pedido recebido", "UDPFS: connected, first request received"))
         }
 
         when (payload[0].toInt() and 0xFF) {
@@ -222,7 +240,7 @@ class UdpfsServer(
             BREAD_REQ -> handleBread(d, addr, payload)
             BWRITE_REQ -> handleBwriteReq(d, addr, payload)
             else -> {
-                log.log("UDPFS: mensagem desconhecida 0x%02x".format(payload[0].toInt() and 0xFF))
+                log.log(t("UDPFS: mensagem desconhecida 0x%02x", "UDPFS: unknown message 0x%02x").format(payload[0].toInt() and 0xFF))
                 sendAck(d, addr, true)
             }
         }
@@ -273,7 +291,10 @@ class UdpfsServer(
 
     private fun inFlight() = (txSeq - txSeqAcked - 1) and 0xFFF
 
-    /** Lê um ACK/NACK puro; pacotes com dados que chegarem durante a espera são descartados (como no Python). */
+    /**
+     * Lê um ACK/NACK puro. Um pacote com dados que chegar durante a espera (o próximo pedido do PS2, com o ACK
+     * de carona) fica em [pendente] e o ACK dele vale; os demais com dados são descartados.
+     */
     private fun recvAckNack(d: DatagramSocket, timeoutMs: Int): Pair<Int, Boolean>? {
         val buf = ByteArray(2048)
         val p = DatagramPacket(buf, buf.size)
@@ -287,7 +308,11 @@ class UdpfsServer(
             if (p.length < 6) continue
             if (u16(buf, 0) and 0xF != PT_DATA) continue
             val dh = u32(buf, 2).toInt()
-            if ((dh shr 18) and 0x3FFF != 0 || (dh shr 14) and 0xF != 0) continue
+            if ((dh shr 18) and 0x3FFF != 0 || (dh shr 14) and 0xF != 0) {
+                if ((dh shr 12) and DF_ACK == 0) continue
+                pendente = buf.copyOf(p.length) to InetSocketAddress(p.address, p.port)
+                return (dh and 0xFFF) to true
+            }
             return (dh and 0xFFF) to ((dh shr 12) and DF_ACK != 0)
         }
     }
@@ -334,7 +359,8 @@ class UdpfsServer(
     }
 
     private fun waitForFinalAck(d: DatagramSocket, addr: InetSocketAddress) {
-        repeat(MAX_WINDOW_RETRIES + 1) {
+        val limite = System.currentTimeMillis() + FINAL_ACK_BUDGET_MS
+        while (System.currentTimeMillis() < limite) {
             if (waitForAck(d, addr, WINDOW_ACK_TIMEOUT_MS)) return
             if (txBuffer.isEmpty()) return
             retransmitFrom(d, addr, txBuffer[0].first)
@@ -348,20 +374,22 @@ class UdpfsServer(
         val first = minOf(minOf(maxChunk, MAX_PAYLOAD - header.size), len)
         sendDataPacket(d, addr, header, data, 0, first, fin = first >= len)
         var offset = first
-        var windowRetries = 0
+        // Prazo em tempo, não em tentativas: uma oscilação de meio segundo no hub não pode abortar a leitura
+        // (o PS2 repete o pedido, mas o resto dos dados não seria mais enviado e o jogo travaria)
+        var semProgressoDesde = System.currentTimeMillis()
         while (offset < len) {
             if (inFlight() >= SEND_WINDOW) {
                 val old = txSeqAcked
                 waitForWindowAck(d, addr)
                 if (txSeqAcked == old) {
-                    if (++windowRetries >= MAX_WINDOW_RETRIES) {
-                        log.log("UDPFS: PS2 não confirmou a janela; transferência abortada")
+                    if (System.currentTimeMillis() - semProgressoDesde >= WINDOW_STALL_BUDGET_MS) {
+                        log.log(t("UDPFS: PS2 não confirmou a janela; transferência abortada", "UDPFS: PS2 did not acknowledge the window; transfer aborted"))
                         return
                     }
-                } else windowRetries = 0
+                } else semProgressoDesde = System.currentTimeMillis()
                 continue
             }
-            windowRetries = 0
+            semProgressoDesde = System.currentTimeMillis()
             val n = minOf(maxChunk, len - offset)
             sendDataPacket(d, addr, null, data, offset, n, fin = offset + n >= len)
             offset += n
@@ -370,7 +398,10 @@ class UdpfsServer(
     }
 
     private fun sendTo(d: DatagramSocket, p: ByteArray, addr: InetSocketAddress) {
-        for (t in router.targets(addr)) d.send(DatagramPacket(p, p.size, t))
+        val agora = System.nanoTime()
+        val a = alvos?.takeIf { it.de == addr && agora - it.em < 1_000_000_000L }
+            ?: Alvos(addr, router.targets(addr), agora).also { alvos = it }
+        for (destino in a.para) d.send(DatagramPacket(p, p.size, destino))
     }
 
     // ---------------------------------------------------------------- respostas
@@ -458,6 +489,21 @@ class UdpfsServer(
         if (h is Handle.FileH) try { h.io.close() } catch (_: IOException) {}
     }
 
+    /** O PS2 recomeçou (ex.: NHDDL passando para o Neutrino): os arquivos que ele tinha aberto não voltam mais. */
+    private fun fecharHandlesDaSessao() {
+        synchronized(handles) {
+            val it = handles.entries.iterator()
+            while (it.hasNext()) {
+                val e = it.next()
+                if (e.key == BLOCK_HANDLE) continue
+                closeHandle(e.value)
+                it.remove()
+            }
+        }
+        wHandle = -1
+        wData = java.io.ByteArrayOutputStream()
+    }
+
     private fun handleOpen(d: DatagramSocket, addr: InetSocketAddress, p: ByteArray) {
         if (p.size < 8) return sendOpenReply(d, addr, -EINVAL)
         val isDir = p[1].toInt() != 0
@@ -470,7 +516,7 @@ class UdpfsServer(
             if (!f.isDirectory || list == null) return sendOpenReply(d, addr, -ENOTDIR)
             if (!listouAlgo) {
                 listouAlgo = true
-                log.log("UDPFS: PS2 listando a pasta (${path.ifEmpty { "/" }})")
+                log.log(t("UDPFS: PS2 listando a pasta (${path.ifEmpty { "/" }})", "UDPFS: PS2 listing folder (${path.ifEmpty { "/" }})"))
             }
             val id = allocHandle(Handle.DirH(list.sortedBy { it.name.lowercase() }))
             return sendOpenReply(d, addr, id, if (id >= 0) Stat.of(f) else null)
@@ -491,10 +537,10 @@ class UdpfsServer(
             if (doTrunc) io.setLength(0)
             val id = allocHandle(Handle.FileH(io, doAppend))
             if (id < 0) io.close()
-            log.log("UDPFS: abriu $path (${f.length() / (1024 * 1024)} MiB)")
+            log.log(t("UDPFS: abriu $path (${f.length() / (1024 * 1024)} MiB)", "UDPFS: opened $path (${f.length() / (1024 * 1024)} MiB)"))
             sendOpenReply(d, addr, id, if (id >= 0) Stat.of(f) else null)
         } catch (e: IOException) {
-            log.log("UDPFS: erro ao abrir $path: ${e.message}")
+            log.log(t("UDPFS: erro ao abrir $path: ${e.message}", "UDPFS: error opening $path: ${e.message}"))
             sendOpenReply(d, addr, -EIO)
         }
     }
@@ -534,7 +580,7 @@ class UdpfsServer(
                 else -> sendReadResult(d, addr, -EBADF)
             }
         } catch (e: IOException) {
-            log.log("UDPFS: erro de leitura: ${e.message}")
+            log.log(t("UDPFS: erro de leitura: ${e.message}", "UDPFS: read error: ${e.message}"))
             sendReadResult(d, addr, -EIO)
         }
     }
@@ -567,7 +613,7 @@ class UdpfsServer(
         val chunkSize = u16(p, at + 4)
         val total = u16(p, at + 6)
         if (chunkNr != wReceived) {
-            log.log("UDPFS: ordem errada nos blocos de escrita (esperado $wReceived, veio $chunkNr)")
+            log.log(t("UDPFS: ordem errada nos blocos de escrita (esperado $wReceived, veio $chunkNr)", "UDPFS: write chunks out of order (expected $wReceived, got $chunkNr)"))
             return sendAck(d, addr, true)
         }
         wData.write(p, at + 8, minOf(chunkSize, p.size - at - 8))
@@ -588,7 +634,7 @@ class UdpfsServer(
             stats.bytesWritten.addAndGet(bytes.size.toLong())
             sendData(d, addr, reply8(WRITE_DONE, bytes.size))
         } catch (e: IOException) {
-            log.log("UDPFS: erro de escrita: ${e.message}")
+            log.log(t("UDPFS: erro de escrita: ${e.message}", "UDPFS: write error: ${e.message}"))
             sendData(d, addr, reply8(WRITE_DONE, -EIO))
         }
     }
@@ -615,7 +661,7 @@ class UdpfsServer(
             }
             sendData(d, addr, reply8(WRITE_DONE, 0))
         } catch (e: IOException) {
-            log.log("UDPFS: erro de escrita em bloco: ${e.message}")
+            log.log(t("UDPFS: erro de escrita em bloco: ${e.message}", "UDPFS: block write error: ${e.message}"))
             sendData(d, addr, reply8(WRITE_DONE, -EIO))
         }
     }
@@ -720,7 +766,7 @@ class UdpfsServer(
                 is Handle.BlockH -> {
                     if (!leuBloco) {
                         leuBloco = true
-                        log.log("UDPFS: PS2 lendo o disco virtual (modo bloco)")
+                        log.log(t("UDPFS: PS2 lendo o disco virtual (modo bloco)", "UDPFS: PS2 reading the virtual disk (block mode)"))
                     }
                     val dev = device!!
                     val n = maxOf(0L, minOf(count.toLong(), dev.sectorCount - sector)).toInt()
@@ -739,7 +785,7 @@ class UdpfsServer(
                 else -> sendReadResult(d, addr, -EBADF)
             }
         } catch (e: IOException) {
-            log.log("UDPFS: erro de leitura em bloco no setor $sector: ${e.message}")
+            log.log(t("UDPFS: erro de leitura em bloco no setor $sector: ${e.message}", "UDPFS: block read error at sector $sector: ${e.message}"))
             sendReadResult(d, addr, -EIO)
         }
     }
@@ -795,7 +841,9 @@ class UdpfsServer(
         const val BLOCK_HANDLE = 0
         const val SEND_WINDOW = 8
         const val WINDOW_ACK_TIMEOUT_MS = 100
-        const val MAX_WINDOW_RETRIES = 4
+        // Sem nenhum ACK novo por este tempo, desiste da resposta (o PS2 espera 5 s antes de repetir o pedido)
+        const val WINDOW_STALL_BUDGET_MS = 3000L
+        const val FINAL_ACK_BUDGET_MS = 1500L
 
         fun dataHeader(ack: Int, flags: Int, hdrWords: Int, dataBytes: Int): Long =
             ((ack and 0xFFF) or ((flags and 0x3) shl 12) or ((hdrWords and 0xF) shl 14) or ((dataBytes and 0x3FFF) shl 18)).toLong() and 0xFFFFFFFFL
