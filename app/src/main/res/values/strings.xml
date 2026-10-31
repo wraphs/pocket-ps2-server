@@ -1,4 +1,138 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PS2 Ponte</string>
+    <string name="app_name" translatable="false">Pocket PS2 Server</string>
+    <string name="pendrive">USB drive</string>
+    <string name="ok">OK</string>
+    <string name="cancelar">Cancel</string>
+    <string name="ajuda">Help: %1$s</string>
+
+    <!-- Status -->
+    <string name="st_parado">Stopped</string>
+    <string name="st_pronto">Ready — tap Start</string>
+    <string name="st_sem_cabo">No network on the cable</string>
+    <string name="st_sem_cabo_dica">Plug in the hub/adapter and turn on Ethernet tethering. You can still start: the servers listen on every network.</string>
+    <string name="st_escolha_pasta">Choose where the games are (step 2)</string>
+    <string name="st_iniciando">Starting…</string>
+    <string name="st_servindo">Serving games</string>
+    <string name="st_esperando_ps2">Waiting for the PS2… open OPL / NHDDL / Neutrino on the console.</string>
+    <string name="st_ultimo_pedido">PS2 %1$s · last request %2$s ago</string>
+    <string name="velocidade">%1$.2f MB/s · %2$.1f MB transferred</string>
+    <string name="btn_iniciar">▶  Start</string>
+    <string name="btn_parar">■  Stop</string>
+
+    <!-- 1 · Cable -->
+    <string name="sec_rede">1 · Cable</string>
+    <string name="rede_ok">✔ Phone %1$s · PS2 suggestion %2$s</string>
+    <string name="rede_nenhuma">⚠ No network on the cable</string>
+    <string name="btn_ancoragem">Tethering</string>
+    <string name="ajuda_rede_titulo">Cable network</string>
+    <string name="ajuda_rede">Phone → USB-C hub/adapter with an Ethernet port → network cable → PS2.\n\nTurn on Settings › Network › Hotspot &amp; tethering › Ethernet tethering. The phone then hands out an IP on the cable.\n\nPhone IP: %1$s\nOn the PS2: DHCP (OPL) or IP %2$s, mask 255.255.255.0.\n\nNo Ethernet tethering option? Some phones only have it on Android 11+ or custom ROMs (e.g. LineageOS). If the adapter is not recognized at all, try a powered hub.</string>
+
+    <!-- Permissions -->
+    <string name="btn_perm_arquivos">Allow file access</string>
+    <string name="btn_perm_bateria">Let it run in the background (battery)</string>
+    <string name="perm_arquivos">Files</string>
+    <string name="perm_bateria">Battery › Unrestricted</string>
+
+    <!-- 2 · Games -->
+    <string name="sec_jogos">2 · Games</string>
+    <string name="ajuda_jogos_titulo">Where the games come from</string>
+    <string name="ajuda_jogos">Folder: a folder on the phone or the root of a USB drive (exFAT, FAT32 or NTFS) with DVD/, CD/, ART/… Works with SMB1, UDPFS and UDPBD (UDPBD sees the folder as a virtual exFAT disk).\n\nWhole USB drive (advanced): the app reads the drive directly over USB (must be exFAT or FAT32). Only UDPBD and UDPFS in block mode. Eject the drive in Settings › Storage before starting; after stopping, unplug and plug it back.</string>
+    <string name="modo_pasta">Folder</string>
+    <string name="modo_usb">Whole USB drive (advanced)</string>
+    <string name="acesso">Access:</string>
+    <string name="acesso_normal">Normal</string>
+    <string name="acesso_root">Root</string>
+    <string name="acesso_shizuku">Shizuku</string>
+    <string name="ajuda_acesso_titulo">File access</string>
+    <string name="ajuda_acesso">Normal: Android permissions. Since Android 11 the folder picker refuses the root of the internal storage — use the "Internal storage" button instead (it uses "all files access"). USB drives go through the picker, which is slower.\n\nRoot: reads any path (including /mnt/media_rw, the USB drive without the picker, faster). Needs Magisk/KernelSU; allow the app when asked.\n\nShizuku: like root, without root. Install and start the Shizuku app (wireless debugging or ADB), then pick Shizuku here and allow it.</string>
+    <string name="pasta_nenhuma">Choose the games folder:</string>
+    <string name="pasta_ok">✔ ready</string>
+    <string name="pasta_sem_dvd">⚠ no DVD/ or CD/ folder</string>
+    <string name="pasta_nao_abriu">⚠ couldn\'t open; choose again</string>
+    <string name="pasta_sem_perm">⚠ file access permission missing</string>
+    <string name="pasta_saf_de_novo">⚠ tap the USB drive below again</string>
+    <string name="pasta_verificando">checking…</string>
+    <string name="pasta_erro">⚠ %1$s</string>
+    <string name="vol_interno">Internal storage</string>
+    <string name="btn_vol">%1$s (root folder)</string>
+    <string name="btn_vol_usb">%1$s (USB drive)</string>
+    <string name="btn_outra_pasta">Choose another folder…</string>
+    <string name="btn_digitar">Type a path…</string>
+    <string name="btn_criar_opl">Create OPL folders (DVD, CD, ART…)</string>
+    <string name="opl_criadas">Folders created. Put the .iso files in DVD (or CD).</string>
+    <string name="usb_nenhum">No USB drive/HDD found.</string>
+    <string name="btn_procurar">Search again</string>
+    <string name="caminho_titulo">Folder path</string>
+
+    <!-- 3 · PS2 -->
+    <string name="sec_ps2">3 · On the PS2</string>
+    <string name="btn_config_ps2">How to set up the PS2</string>
+    <string name="servidores">Servers</string>
+    <string name="srv_smb">SMB1 · OPL</string>
+    <string name="srv_udpfs">UDPFS · NHDDL, Neutrino, RiptOPL</string>
+    <string name="srv_udpbd">UDPBD · Neutrino, XEB+, RiptOPL</string>
+    <string name="ajuda_smb">OPL / RiptOPL › Network Settings:\n• IP Address Type: DHCP (or %2$s)\n• Address: %1$s\n• Port: %3$d\n• Share: PS2SMB · User: guest · Password: empty\n• ETH Start Mode: Auto; save and restart OPL.</string>
+    <string name="ajuda_udpfs">Faster than SMB. Serves the folder (and the virtual disk).\n\nNHDDL: nhddl.yaml with\n  mode: udpfs\n  udpfs_ip: %1$s\nNeutrino: config/bsd-udpfs.toml → args = ["ip=%1$s"]\nRiptOPL: use the same PS2 IP as in the network settings.</string>
+    <string name="ajuda_udpbd">Block device: the PS2 sees an exFAT disk (the folder as a virtual disk, or the whole USB drive).\n\nNeutrino: config/bsd-udpbd.toml → args = ["ip=%1$s"]\nRiptOPL / XEB+: UDPBD device, with PS2 IP %1$s.</string>
+    <string name="config_ps2_titulo">PS2 setup</string>
+
+    <!-- Log -->
+    <string name="sec_log">Log</string>
+    <string name="btn_copiar">Copy</string>
+    <string name="btn_limpar">Clear</string>
+    <string name="log_copiado">Log copied</string>
+
+    <!-- Toasts -->
+    <string name="av_marque_servidor">Select at least one server</string>
+    <string name="av_escolha_pasta">Choose a folder first</string>
+    <string name="av_saf_de_novo">Tap the USB drive again to allow access</string>
+    <string name="av_perm_arquivos">Allow file access first</string>
+    <string name="av_escolha_usb">Choose a USB drive/HDD</string>
+    <string name="av_usb_desconectado">USB drive disconnected</string>
+    <string name="av_usb_sem_perm">No permission to use the USB drive</string>
+    <string name="av_nao_e_armazenamento">That folder isn\'t on the phone or USB drive storage</string>
+    <string name="av_saf_sem_persistir">Android didn\'t grant permanent access to this folder</string>
+    <string name="av_seletor_falhou">Couldn\'t open the folder picker</string>
+    <string name="av_abra_config">Open Settings › Apps › %1$s › %2$s</string>
+    <string name="av_pasta_nao_abriu">Couldn\'t open the folder: %1$s</string>
+    <string name="av_aguarde_pasta">Still checking the folder, try again in a moment</string>
+    <string name="shizuku_parado">Shizuku isn\'t running. Open the Shizuku app and start it.</string>
+    <string name="shizuku_negado">Shizuku permission denied</string>
+
+    <!-- Notification -->
+    <string name="canal">Server</string>
+    <string name="notif_parar">Stop</string>
+
+    <!-- Service log -->
+    <string name="log_pasta">Folder: %1$s</string>
+    <string name="log_montando">Building the virtual exFAT disk…</string>
+    <string name="log_pendrive">USB drive: %1$s, %2$.1f GiB%3$s</string>
+    <string name="log_protegido">, write-protected</string>
+    <string name="log_particoes">Partitions: %1$s</string>
+    <string name="log_ntfs">⚠ NTFS drive: in block mode the PS2 only reads exFAT/FAT32. Use Folder mode (works with NTFS) or format it as exFAT.</string>
+    <string name="log_fs_desconhecido">⚠ No exFAT/FAT32 found on this disk; the PS2 may not see the games in block mode.</string>
+    <string name="log_porta_falhou">%1$s: couldn\'t open the port (%2$s)</string>
+    <string name="log_ligado">%1$s on</string>
+    <string name="log_nenhum">no server started</string>
+    <string name="log_erro">Error: %1$s</string>
+    <string name="log_parado">Server stopped</string>
+    <string name="log_usb_saiu">USB drive disconnected</string>
+    <string name="err_pasta_sumiu">folder not found: %1$s</string>
+    <string name="err_usb_sumiu">USB drive not found (was it unplugged?)</string>
+    <string name="servindo">Serving: %1$s</string>
+
+    <!-- Hints (diagnosis) -->
+    <string name="dica_porta">↳ Another app is already using this port (another SMB/PS2 server?). Close it or restart the phone.</string>
+    <string name="dica_rede_oscilou">↳ The hub\'s network adapter dropped for a moment. If it keeps happening: use a hub with its own power supply, check the USB-C plug, or try another hub/cable.</string>
+    <string name="dica_ps2_parou">↳ The PS2 stopped answering mid-transfer: the cable/hub flickered, or the game froze on the console (try another mode or loader settings).</string>
+    <string name="dica_conexao_caiu">↳ If the game froze now, the connection dropped: check the cable, the hub power and that the phone screen-off/battery saver didn\'t cut the network.</string>
+    <string name="dica_leitura">↳ Failed to read the game file: USB drive loose or without power, folder access revoked, or a damaged file.</string>
+    <string name="dica_smb2">↳ That client isn\'t OPL: only SMB1 is supported (OPL and RiptOPL use SMB1).</string>
+    <string name="dica_acesso_caiu">↳ The root/Shizuku access stopped (Shizuku restarted, or root was revoked). Stop and start again.</string>
+    <string name="dica_sem_cabo">⚠ No network on the cable. Check: hub plugged in and powered, cable in the PS2, Ethernet tethering on.</string>
+    <string name="dica_cabo_voltou">✔ Cable network back: %1$s</string>
+    <string name="dica_sem_ps2">⚠ No sign of the PS2 after %1$d s. Check:\n  • the PS2 IP is in the same network as the phone (e.g. %3$s, mask 255.255.255.0) or uses DHCP;\n  • the server address on the PS2 is %2$s;\n  • the green/orange LED of the network port lights up on the hub;\n  • the loader uses the right protocol (OPL → SMB, NHDDL/Neutrino → UDPFS/UDPBD).</string>
+    <string name="dica_outra_rede">⚠ The PS2 (%1$s) is not on the cable network (%2$s). Its IP should look like %3$s; replies may go out through Wi-Fi.</string>
+    <string name="dica_bateria">⚠ Android may pause the server with the screen off. Tap \"Let it run in the background\".</string>
 </resources>

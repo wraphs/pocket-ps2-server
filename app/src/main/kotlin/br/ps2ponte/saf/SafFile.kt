@@ -196,6 +196,7 @@ class SafFile internal constructor(
         var id = docId ?: return false
         return try {
             if (dest.parentFile.path != parentFile.path) {
+                if (android.os.Build.VERSION.SDK_INT < 24) return false // mover entre pastas no SAF só existe no Android 7+
                 val destPai = dest.idDoPai() ?: return false
                 val origemPai = idDoPai() ?: return false
                 val movido = DocumentsContract.moveDocument(raiz.resolver, raiz.docUri(id), raiz.docUri(origemPai), raiz.docUri(destPai)) ?: return false

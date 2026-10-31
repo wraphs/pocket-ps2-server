@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 5–7 (sem ícone adaptativo): as mesmas camadas, cortando a margem de 18dp do adaptativo -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/ic_launcher_fundo" />
+    <item android:drawable="@drawable/ic_launcher_frente" />
+</layer-list>

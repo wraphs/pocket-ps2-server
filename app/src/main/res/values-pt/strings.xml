@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pendrive">pendrive</string>
+    <string name="ok">OK</string>
+    <string name="cancelar">Cancelar</string>
+    <string name="ajuda">Ajuda: %1$s</string>
+
+    <!-- Status -->
+    <string name="st_parado">Parado</string>
+    <string name="st_pronto">Tudo pronto — toque em Iniciar</string>
+    <string name="st_sem_cabo">Sem rede pelo cabo</string>
+    <string name="st_sem_cabo_dica">Ligue o hub/adaptador e ative a Ancoragem Ethernet. Dá para iniciar assim mesmo: os servidores escutam em todas as redes.</string>
+    <string name="st_escolha_pasta">Escolha onde estão os jogos (passo 2)</string>
+    <string name="st_iniciando">Iniciando…</string>
+    <string name="st_servindo">Servindo jogos</string>
+    <string name="st_esperando_ps2">Esperando o PS2… abra o OPL / NHDDL / Neutrino no console.</string>
+    <string name="st_ultimo_pedido">PS2 %1$s · último pedido há %2$s</string>
+    <string name="velocidade">%1$.2f MB/s · %2$.1f MB transferidos</string>
+    <string name="btn_iniciar">▶  Iniciar</string>
+    <string name="btn_parar">■  Parar</string>
+
+    <!-- 1 · Cabo -->
+    <string name="sec_rede">1 · Cabo</string>
+    <string name="rede_ok">✔ Celular %1$s · sugestão p/ PS2 %2$s</string>
+    <string name="rede_nenhuma">⚠ Sem rede pelo cabo</string>
+    <string name="btn_ancoragem">Ancoragem</string>
+    <string name="ajuda_rede_titulo">Rede pelo cabo</string>
+    <string name="ajuda_rede">Celular → hub/adaptador USB-C com porta de rede → cabo de rede → PS2.\n\nAtive em Configurações › Conexões › Roteador Wi-Fi e ancoragem › Ancoragem Ethernet. O celular passa a dar IP pelo cabo.\n\nIP do celular: %1$s\nNo PS2: DHCP (OPL) ou IP %2$s, máscara 255.255.255.0.\n\nSem a opção de Ancoragem Ethernet? Alguns celulares só têm no Android 11+ ou em ROMs como a LineageOS. Se o adaptador nem é reconhecido, tente um hub com fonte.</string>
+
+    <!-- Permissões -->
+    <string name="btn_perm_arquivos">Permitir acesso aos arquivos</string>
+    <string name="btn_perm_bateria">Deixar rodar em segundo plano (bateria)</string>
+    <string name="perm_arquivos">Arquivos</string>
+    <string name="perm_bateria">Bateria › Sem restrições</string>
+
+    <!-- 2 · Jogos -->
+    <string name="sec_jogos">2 · Jogos</string>
+    <string name="ajuda_jogos_titulo">De onde vêm os jogos</string>
+    <string name="ajuda_jogos">Pasta: uma pasta do celular ou a raiz do pendrive (exFAT, FAT32 ou NTFS) com DVD/, CD/, ART/… Funciona com SMB1, UDPFS e UDPBD (o UDPBD vê a pasta como um disco exFAT virtual).\n\nPendrive inteiro (avançado): o app lê o pendrive direto pelo USB (precisa estar em exFAT ou FAT32). Só UDPBD e UDPFS em modo bloco. Ejete o pendrive em Configurações › Armazenamento antes de iniciar; depois de parar, desconecte e reconecte.</string>
+    <string name="modo_pasta">Pasta</string>
+    <string name="modo_usb">Pendrive inteiro (avançado)</string>
+    <string name="acesso">Acesso:</string>
+    <string name="acesso_normal">Normal</string>
+    <string name="acesso_root">Root</string>
+    <string name="acesso_shizuku">Shizuku</string>
+    <string name="ajuda_acesso_titulo">Acesso aos arquivos</string>
+    <string name="ajuda_acesso">Normal: permissões do Android. Desde o Android 11 o seletor de pastas recusa a raiz do armazenamento interno — use o botão "Armazenamento interno" (ele usa o "acesso a todos os arquivos"). Pendrives passam pelo seletor, que é mais lento.\n\nRoot: lê qualquer caminho (inclusive /mnt/media_rw, o pendrive sem o seletor, mais rápido). Precisa de Magisk/KernelSU; permita o app quando perguntar.\n\nShizuku: igual ao root, sem root. Instale e inicie o app Shizuku (depuração sem fio ou ADB), depois escolha Shizuku aqui e permita.</string>
+    <string name="pasta_nenhuma">Escolha a pasta dos jogos:</string>
+    <string name="pasta_ok">✔ pronta</string>
+    <string name="pasta_sem_dvd">⚠ sem pasta DVD/ ou CD/</string>
+    <string name="pasta_nao_abriu">⚠ não abriu; escolha de novo</string>
+    <string name="pasta_sem_perm">⚠ falta a permissão de arquivos</string>
+    <string name="pasta_saf_de_novo">⚠ toque de novo no pendrive abaixo</string>
+    <string name="pasta_verificando">verificando…</string>
+    <string name="pasta_erro">⚠ %1$s</string>
+    <string name="vol_interno">Armazenamento interno</string>
+    <string name="btn_vol">%1$s (raiz)</string>
+    <string name="btn_vol_usb">%1$s (pendrive)</string>
+    <string name="btn_outra_pasta">Escolher outra pasta…</string>
+    <string name="btn_digitar">Digitar caminho…</string>
+    <string name="btn_criar_opl">Criar pastas do OPL (DVD, CD, ART…)</string>
+    <string name="opl_criadas">Pastas criadas. Coloque os .iso em DVD (ou CD).</string>
+    <string name="usb_nenhum">Nenhum pendrive/HD USB encontrado.</string>
+    <string name="btn_procurar">Procurar de novo</string>
+    <string name="caminho_titulo">Caminho da pasta</string>
+
+    <!-- 3 · PS2 -->
+    <string name="sec_ps2">3 · No PS2</string>
+    <string name="btn_config_ps2">Como configurar o PS2</string>
+    <string name="servidores">Servidores</string>
+    <string name="srv_smb">SMB1 · OPL</string>
+    <string name="srv_udpfs">UDPFS · NHDDL, Neutrino, RiptOPL</string>
+    <string name="srv_udpbd">UDPBD · Neutrino, XEB+, RiptOPL</string>
+    <string name="ajuda_smb">OPL / RiptOPL › Network Settings:\n• IP Address Type: DHCP (ou %2$s)\n• Address: %1$s\n• Port: %3$d\n• Share: PS2SMB · User: guest · Password: vazio\n• ETH Start Mode: Auto; salve e reinicie o OPL.</string>
+    <string name="ajuda_udpfs">Mais rápido que o SMB. Serve a pasta (e o disco virtual).\n\nNHDDL: nhddl.yaml com\n  mode: udpfs\n  udpfs_ip: %1$s\nNeutrino: config/bsd-udpfs.toml → args = ["ip=%1$s"]\nRiptOPL: use o mesmo IP do PS2 das configurações de rede.</string>
+    <string name="ajuda_udpbd">Bloco: o PS2 vê um disco exFAT (a pasta como disco virtual, ou o pendrive inteiro).\n\nNeutrino: config/bsd-udpbd.toml → args = ["ip=%1$s"]\nRiptOPL / XEB+: dispositivo UDPBD, com o IP do PS2 %1$s.</string>
+    <string name="config_ps2_titulo">Configurar o PS2</string>
+
+    <!-- Log -->
+    <string name="sec_log">Log</string>
+    <string name="btn_copiar">Copiar</string>
+    <string name="btn_limpar">Limpar</string>
+    <string name="log_copiado">Log copiado</string>
+
+    <!-- Avisos -->
+    <string name="av_marque_servidor">Marque pelo menos um servidor</string>
+    <string name="av_escolha_pasta">Escolha uma pasta primeiro</string>
+    <string name="av_saf_de_novo">Toque de novo no pendrive para liberar o acesso</string>
+    <string name="av_perm_arquivos">Permita o acesso aos arquivos primeiro</string>
+    <string name="av_escolha_usb">Escolha um pendrive/HD</string>
+    <string name="av_usb_desconectado">Pendrive desconectado</string>
+    <string name="av_usb_sem_perm">Sem permissão para usar o pendrive</string>
+    <string name="av_nao_e_armazenamento">Essa pasta não é do armazenamento do celular/pendrive</string>
+    <string name="av_saf_sem_persistir">O Android não liberou o acesso permanente a essa pasta</string>
+    <string name="av_seletor_falhou">Não consegui abrir o seletor de pastas</string>
+    <string name="av_abra_config">Abra Configurações › Apps › %1$s › %2$s</string>
+    <string name="av_pasta_nao_abriu">Não consegui abrir a pasta: %1$s</string>
+    <string name="av_aguarde_pasta">Ainda verificando a pasta, tente de novo em instantes</string>
+    <string name="shizuku_parado">O Shizuku não está rodando. Abra o app Shizuku e inicie o serviço.</string>
+    <string name="shizuku_negado">O Shizuku não liberou o acesso</string>
+
+    <!-- Notificação -->
+    <string name="canal">Servidor</string>
+    <string name="notif_parar">Parar</string>
+
+    <!-- Log do serviço -->
+    <string name="log_pasta">Pasta: %1$s</string>
+    <string name="log_montando">Montando o disco exFAT virtual…</string>
+    <string name="log_pendrive">Pendrive: %1$s, %2$.1f GiB%3$s</string>
+    <string name="log_protegido">, protegido contra gravação</string>
+    <string name="log_particoes">Partições: %1$s</string>
+    <string name="log_ntfs">⚠ Pendrive em NTFS: no modo bloco o PS2 só lê exFAT/FAT32. Use o modo Pasta (funciona com NTFS) ou formate em exFAT.</string>
+    <string name="log_fs_desconhecido">⚠ Não reconheci exFAT/FAT32 neste disco; o PS2 pode não enxergar os jogos no modo bloco.</string>
+    <string name="log_porta_falhou">%1$s: não consegui abrir a porta (%2$s)</string>
+    <string name="log_ligado">%1$s ligado</string>
+    <string name="log_nenhum">nenhum servidor ligou</string>
+    <string name="log_erro">Erro: %1$s</string>
+    <string name="log_parado">Servidor parado</string>
+    <string name="log_usb_saiu">Pendrive desconectado</string>
+    <string name="err_pasta_sumiu">pasta não encontrada: %1$s</string>
+    <string name="err_usb_sumiu">pendrive não encontrado (foi desconectado?)</string>
+    <string name="servindo">Servindo: %1$s</string>
+
+    <!-- Dicas (diagnóstico) -->
+    <string name="dica_porta">↳ Outro app já está usando essa porta (outro servidor SMB/PS2?). Feche-o ou reinicie o celular.</string>
+    <string name="dica_rede_oscilou">↳ O adaptador de rede do hub caiu por um instante. Se repetir: use um hub com fonte própria, confira o encaixe do USB-C, ou teste outro hub/cabo.</string>
+    <string name="dica_ps2_parou">↳ O PS2 parou de responder no meio da transferência: o cabo/hub oscilou, ou o jogo travou no console (teste outro modo ou configuração do loader).</string>
+    <string name="dica_conexao_caiu">↳ Se o jogo travou agora, a conexão caiu: confira o cabo, a energia do hub e se a economia de bateria/tela apagada não cortou a rede.</string>
+    <string name="dica_leitura">↳ Falha ao ler o arquivo do jogo: pendrive solto ou sem energia, acesso à pasta revogado, ou arquivo danificado.</string>
+    <string name="dica_smb2">↳ Esse cliente não é o OPL: só o SMB1 é suportado (OPL e RiptOPL usam SMB1).</string>
+    <string name="dica_acesso_caiu">↳ O acesso root/Shizuku parou (o Shizuku reiniciou ou o root foi revogado). Pare e inicie de novo.</string>
+    <string name="dica_sem_cabo">⚠ Sem rede pelo cabo. Confira: hub conectado e com energia, cabo no PS2, Ancoragem Ethernet ligada.</string>
+    <string name="dica_cabo_voltou">✔ Rede pelo cabo voltou: %1$s</string>
+    <string name="dica_sem_ps2">⚠ Nenhum sinal do PS2 depois de %1$d s. Confira:\n  • o IP do PS2 está na mesma rede do celular (ex.: %3$s, máscara 255.255.255.0) ou usa DHCP;\n  • o endereço do servidor no PS2 é %2$s;\n  • o LED verde/laranja da porta de rede acende no hub;\n  • o loader usa o protocolo certo (OPL → SMB, NHDDL/Neutrino → UDPFS/UDPBD).</string>
+    <string name="dica_outra_rede">⚠ O PS2 (%1$s) não está na rede do cabo (%2$s). O IP dele deveria ser parecido com %3$s; as respostas podem sair pelo Wi-Fi.</string>
+    <string name="dica_bateria">⚠ O Android pode pausar o servidor com a tela apagada. Toque em \"Deixar rodar em segundo plano\".</string>
+</resources>

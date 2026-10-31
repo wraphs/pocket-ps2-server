@@ -22,6 +22,17 @@ object Rede {
         return "${p[0]}.${p[1]}.${p[2]}.$fim"
     }
 
+    /** [ip] está na mesma sub-rede da interface [rede]? (só IPv4; na dúvida, diz que sim) */
+    fun mesmaRede(ip: String, rede: Ip): Boolean {
+        fun num(s: String): Long? = s.split('.').takeIf { it.size == 4 }
+            ?.fold(0L) { acc, p -> (acc shl 8) or (p.toLongOrNull() ?: return null) }
+        val a = num(ip) ?: return true
+        val b = num(rede.ip) ?: return true
+        val p = rede.prefixo.coerceIn(0, 32)
+        val m = if (p == 0) 0L else (0xFFFFFFFFL shl (32 - p)) and 0xFFFFFFFFL
+        return (a and m) == (b and m)
+    }
+
     fun mascara(prefixo: Int): String {
         val m = if (prefixo <= 0) 0 else (-1 shl (32 - prefixo.coerceAtMost(32)))
         return "${(m ushr 24) and 255}.${(m ushr 16) and 255}.${(m ushr 8) and 255}.${m and 255}"

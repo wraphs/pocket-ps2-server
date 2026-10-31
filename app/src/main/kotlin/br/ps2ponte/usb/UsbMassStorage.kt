@@ -6,6 +6,7 @@ import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbEndpoint
 import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbManager
+import android.os.Build
 import br.ps2ponte.core.block.BlockDevice
 import java.io.IOException
 import java.nio.ByteBuffer
@@ -274,10 +275,12 @@ class UsbMassStorage private constructor(
 
     companion object {
         private const val TIMEOUT_MS = 5000
-        private const val CHUNK = 16 * 1024
+        /** 120 KiB por comando, qualquer que seja o setor (o mesmo do Linux nos dispositivos USB 2.0). */
+        private const val MAX_BYTES_PER_CMD = 120 * 1024
 
-        /** 64 KiB por comando, qualquer que seja o setor (o Linux usa 120 KiB nos dispositivos USB 2.0). */
-        private const val MAX_BYTES_PER_CMD = 64 * 1024
+        // Até o Android 8.1 o bulkTransfer aceitava no máximo 16 KiB por chamada; do 9 em diante, o comando
+        // inteiro numa chamada só (menos idas e voltas no barramento: mais MB/s)
+        private val CHUNK = if (Build.VERSION.SDK_INT >= 28) MAX_BYTES_PER_CMD else 16 * 1024
 
         /** Disco (0x00) e disco RBC (0x0E). */
         private val TIPOS_DISCO = setOf(0x00, 0x0E)
