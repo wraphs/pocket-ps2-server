@@ -207,9 +207,9 @@ class UdpfsServer(
                 if (txBuffer.isNotEmpty()) retransmitFrom(d, addr, txBuffer[0].first)
                 return
             } else if (seq == 0) {
-                // O PS2 recomeçou a conexão (ex.: reboot do IOP)
+                // O PS2 recomeçou a conexão (ex.: reboot do IOP). Os arquivos abertos continuam valendo:
+                // o Neutrino abre a ISO antes do reboot e o udpfs_fhi segue lendo pelo mesmo handle.
                 txSeq = 0; txBuffer = ArrayList(); txSeqAcked = 0; rxSeqExpected = 0
-                fecharHandlesDaSessao()
             } else {
                 sendAck(d, addr, false)
                 return
@@ -487,21 +487,6 @@ class UdpfsServer(
 
     private fun closeHandle(h: Handle) {
         if (h is Handle.FileH) try { h.io.close() } catch (_: IOException) {}
-    }
-
-    /** O PS2 recomeçou (ex.: NHDDL passando para o Neutrino): os arquivos que ele tinha aberto não voltam mais. */
-    private fun fecharHandlesDaSessao() {
-        synchronized(handles) {
-            val it = handles.entries.iterator()
-            while (it.hasNext()) {
-                val e = it.next()
-                if (e.key == BLOCK_HANDLE) continue
-                closeHandle(e.value)
-                it.remove()
-            }
-        }
-        wHandle = -1
-        wData = java.io.ByteArrayOutputStream()
     }
 
     private fun handleOpen(d: DatagramSocket, addr: InetSocketAddress, p: ByteArray) {
