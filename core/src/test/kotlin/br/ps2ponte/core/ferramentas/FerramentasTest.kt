@@ -54,6 +54,41 @@ class FerramentasTest {
     }
 
     @Test
+    fun catalogoAchaJogosEReaproveita() {
+        File(dir, "DVD").mkdirs()
+        File(dir, "POPS").mkdirs()
+        File(dir, "ART").mkdirs()
+        File(dir, "Baixados/sub").mkdirs()
+        File(dir, "DVD/a.iso").writeBytes(isoCom("BOOT2 = cdrom0:\\SLUS_209.46;1"))
+        File(dir, "solto.iso").writeBytes(isoCom("BOOT2 = cdrom0:\\SCES_502.94;1"))
+        File(dir, "Baixados/sub/b.zso").writeBytes(ByteArray(10))
+        File(dir, "POPS/ps1.iso").writeBytes(ByteArray(10)) // PS1: fora do catálogo
+        File(dir, "ART/SLUS_209.46_COV.png").writeBytes(ByteArray(10))
+        val raiz = LocalFile.root(dir)
+        var lidos = 0
+        val c1 = Catalogo.varrer(raiz, null) { lidos++ }
+        assertEquals(listOf("a.iso", "b.zso", "solto.iso"), c1.jogos.map { it.nome })
+        assertEquals(3, lidos)
+        val a = c1.jogos.first { it.nome == "a.iso" }
+        assertEquals("SLUS_209.46", a.id)
+        assertTrue(c1.temCapa(a))
+        assertEquals(2, c1.semCapa)
+        assertEquals(2, c1.foraDoLugar)
+        assertEquals(listOf("DVD/a.iso"), c1.isos.map { it.rel })
+        assertTrue(c1.tarDesatualizado)
+
+        // Pelo texto salvo, a segunda varredura não abre nada que não mudou
+        val c2 = Catalogo.varrer(raiz, Catalogo.ler(c1.texto())) { lidos++ }
+        assertEquals(3, lidos)
+        assertEquals(c1.jogos.map { it.rel to it.id }, c2.jogos.map { it.rel to it.id })
+        // Arquivo alterado é lido de novo
+        File(dir, "solto.iso").writeBytes(isoCom("BOOT2 = cdrom0:\\SCES_999.99;1", outros = 5))
+        val c3 = Catalogo.varrer(raiz, c2) { lidos++ }
+        assertEquals(4, lidos)
+        assertEquals("SCES_999.99", c3.jogos.first { it.nome == "solto.iso" }.id)
+    }
+
+    @Test
     fun png8LegivelEPequeno() {
         val l = 140
         val a = 200

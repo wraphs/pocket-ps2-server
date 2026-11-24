@@ -4,12 +4,15 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.PowerManager
+import br.ps2ponte.core.ferramentas.Catalogo
 import br.ps2ponte.core.ferramentas.IdJogo
 import br.ps2ponte.core.ferramentas.Png8
 import br.ps2ponte.core.ferramentas.Tar
 import br.ps2ponte.core.fs.Comprimido
+import br.ps2ponte.core.fs.LocalTree
 import br.ps2ponte.core.fs.VFile
 import br.ps2ponte.core.fs.VHandle
+import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
@@ -53,8 +56,11 @@ object Ferramentas {
         cancelado = true
     }
 
-    /** Roda [corpo] em segundo plano; o texto que ele devolve vai para o log. */
-    fun rodar(ctx: Context, nome: String, corpo: () -> String) {
+    /**
+     * Roda [corpo] em segundo plano; o texto que ele devolve vai para o log.
+     * [silencioso]: não anuncia o começo e só escreve no log se o resultado tiver algo (rotina automática).
+     */
+    fun rodar(ctx: Context, nome: String, silencioso: Boolean = false, corpo: () -> String) {
         if (ocupado) return
         val app = ctx.applicationContext
         titulo = nome
@@ -66,8 +72,9 @@ object Ferramentas {
             val wl = (app.getSystemService(Context.POWER_SERVICE) as PowerManager)
                 .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "pocketps2:ferramentas").apply { acquire(6 * 60 * 60 * 1000L) }
             try {
-                Estado.log("🧰 $nome…")
-                Estado.log("🧰 " + corpo())
+                if (!silencioso) Estado.log("🧰 $nome…")
+                val r = corpo()
+                if (!silencioso || r.isNotBlank()) Estado.log("🧰 " + r)
             } catch (e: Cancelado) {
                 Estado.log("🧰 " + app.getString(R.string.ft_cancelado, nome))
             } catch (e: Exception) {
@@ -82,10 +89,77 @@ object Ferramentas {
         }, "pocketps2-ferramentas").apply { priority = Thread.NORM_PRIORITY - 1 }.start()
     }
 
+    // ------------------------------------------------------------------ catálogo
+
+    /** Catálogo da pasta [catalogoDe] (carregado do disco e refeito a cada abertura do app). */
+    @Volatile var catalogo: Catalogo? = null
+        private set
+    @Volatile private var catalogoDe: String? = null
+    @Volatile private var ultimaRotina = 0L
+
+    const val PREF_AUTO_TAR = "auto_tar"
+    const val PREF_AUTO_ZSO = "auto_zso"
+
+    private fun arqCatalogo(ctx: Context, pasta: String) = File(ctx.filesDir, "catalogo-${Integer.toHexString(pasta.hashCode())}.txt")
+
+    /** Lê o catálogo salvo da pasta (rápido: só o arquivo de texto). */
+    fun carregarCatalogo(ctx: Context, pasta: String) {
+        if (catalogoDe == pasta) return
+        catalogo = try { arqCatalogo(ctx, pasta).takeIf { it.exists() }?.readText()?.let { Catalogo.ler(it) } } catch (e: IOException) { null }
+        catalogoDe = pasta
+    }
+
+    /** Varre a pasta (reaproveitando o que não mudou) e salva. */
+    fun atualizarCatalogo(ctx: Context, pasta: String, raiz: VFile): Catalogo {
+        carregarCatalogo(ctx, pasta)
+        val novo = Catalogo.varrer(raiz, catalogo) { nome -> passo(0, -1, ctx.getString(R.string.ft_lendo_jogo, nome)) }
+        try { arqCatalogo(ctx, pasta).writeText(novo.texto()) } catch (_: IOException) {}
+        catalogo = novo
+        catalogoDe = pasta
+        Estado.avisar()
+        return novo
+    }
+
+    /**
+     * Rotina ao abrir o app: atualiza o catálogo e, se os interruptores estiverem ligados, compacta as ISOs
+     * novas (só com o servidor parado: o PS2 pode estar lendo) e refaz o art.tar. No máximo uma vez por minuto.
+     */
+    fun rotina(ctx: Context, pasta: String, forcar: Boolean = false) {
+        val agora = System.currentTimeMillis()
+        if (ocupado || (!forcar && catalogoDe == pasta && agora - ultimaRotina < 60_000)) return
+        ultimaRotina = agora
+        val prefs = ctx.getSharedPreferences("ps2ponte", Context.MODE_PRIVATE)
+        rodar(ctx, ctx.getString(R.string.ft_atualizando), silencioso = true) {
+            val raiz = Fonte.raiz(ctx, pasta)
+            var c = atualizarCatalogo(ctx, pasta, raiz)
+            val msgs = mutableListOf<String>()
+            if (prefs.getBoolean(PREF_AUTO_ZSO, false) && !Estado.rodando && c.isos.isNotEmpty()) {
+                msgs += ctx.getString(R.string.ft_auto_zso) + " " + compactar(ctx, jogosDe(raiz, c.isos), apagarOriginal = true)
+                c = atualizarCatalogo(ctx, pasta, raiz)
+            }
+            if (prefs.getBoolean(PREF_AUTO_TAR, false) && c.tarDesatualizado) {
+                msgs += ctx.getString(R.string.ft_auto_tar) + " " + empacotarArt(ctx, raiz)
+                atualizarCatalogo(ctx, pasta, raiz)
+            }
+            msgs.joinToString("\n")
+        }
+    }
+
+    /** Depois de uma ferramenta manual: art.tar automático (se ligado) e catálogo em dia. */
+    fun depois(ctx: Context, pasta: String, raiz: VFile, mexeuNaArte: Boolean): String {
+        val prefs = ctx.getSharedPreferences("ps2ponte", Context.MODE_PRIVATE)
+        val c = atualizarCatalogo(ctx, pasta, raiz)
+        if (mexeuNaArte && prefs.getBoolean(PREF_AUTO_TAR, false) && c.tarDesatualizado) {
+            val r = empacotarArt(ctx, raiz)
+            atualizarCatalogo(ctx, pasta, raiz)
+            return "\n" + ctx.getString(R.string.ft_auto_tar) + " " + r
+        }
+        return ""
+    }
+
     // ------------------------------------------------------------------ jogos
 
     val PASTAS_OPL = listOf("DVD", "CD", "ART", "CFG", "CHT", "LNG", "THM", "VMC", "POPS", "APPS")
-    private val EXT_JOGO = listOf(".iso", ".zso", ".cso")
     private const val LIMITE_CD = 700L * 1024 * 1024
 
     class Jogo(val arquivo: VFile, val pasta: String) {
@@ -94,14 +168,17 @@ object Ferramentas {
         var id: String? = null
     }
 
-    fun ehJogo(nome: String) = EXT_JOGO.any { nome.endsWith(it, true) }
-
     private fun pasta(raiz: VFile, nome: String): VFile? =
         raiz.listFiles()?.firstOrNull { it.isDirectory && it.name.equals(nome, true) }
 
-    fun jogos(raiz: VFile): List<Jogo> = listOf("DVD", "CD").flatMap { p ->
-        pasta(raiz, p)?.listFiles()?.filter { it.isFile && ehJogo(it.name) }?.map { Jogo(it, p) } ?: emptyList()
-    }.sortedBy { it.nome.lowercase() }
+    /** Itens do catálogo como arquivos da pasta (os que ainda existem). */
+    fun jogosDe(raiz: VFile, itens: List<Catalogo.Item>): List<Jogo> {
+        val arvore = LocalTree(raiz)
+        return itens.mapNotNull { i ->
+            val f = arvore.resolve(i.rel)?.takeIf { it.isFile } ?: return@mapNotNull null
+            Jogo(f, i.pasta).also { it.id = i.id }
+        }
+    }
 
     /** Abre o jogo já descompactado (ISO, ZSO ou CSO). */
     private fun abrirIso(f: VFile): VHandle = if (Comprimido.ehCompactado(f.name)) Comprimido.abrir(f.open(false)) else f.open(false)
@@ -116,28 +193,27 @@ object Ferramentas {
 
     // ------------------------------------------------------------------ organizar
 
-    /** Cria as pastas do OPL e leva para DVD/ ou CD/ os jogos soltos na raiz (ou em subpastas que não são do OPL). */
-    fun organizar(ctx: Context, raiz: VFile): String {
+    /**
+     * Cria as pastas do OPL e leva para DVD/ ou CD/ todos os jogos que o catálogo achou fora do lugar
+     * (na raiz, em subpastas de download, dentro de DVD/xyz/…).
+     */
+    fun organizar(ctx: Context, pasta: String, raiz: VFile): String {
         for (n in PASTAS_OPL) if (pasta(raiz, n) == null) raiz.child(n).mkdirs()
         val dvd = pasta(raiz, "DVD") ?: throw IOException(ctx.getString(R.string.ft_sem_pasta, "DVD"))
         val cd = pasta(raiz, "CD") ?: throw IOException(ctx.getString(R.string.ft_sem_pasta, "CD"))
-        val soltos = mutableListOf<VFile>()
-        for (f in raiz.listFiles().orEmpty()) {
-            if (f.isFile && ehJogo(f.name)) soltos += f
-            else if (f.isDirectory && PASTAS_OPL.none { it.equals(f.name, true) } && !f.name.startsWith(".")) {
-                f.listFiles()?.filter { it.isFile && ehJogo(it.name) }?.let { soltos += it }
-            }
-        }
+        val soltos = jogosDe(raiz, atualizarCatalogo(ctx, pasta, raiz).jogos.filter { it.foraDoLugar })
         var movidos = 0
         val falhas = mutableListOf<String>()
-        soltos.forEachIndexed { i, f ->
+        soltos.forEachIndexed { i, j ->
+            val f = j.arquivo
             passo(i.toLong(), soltos.size.toLong(), f.name)
             val destino = (if (tamanhoReal(f) <= LIMITE_CD) cd else dvd).child(f.name)
             if (destino.exists() || !f.renameTo(destino)) falhas += f.name else movidos++
         }
+        val c = atualizarCatalogo(ctx, pasta, raiz)
         val sb = StringBuilder(ctx.getString(R.string.ft_organizado, movidos))
         if (falhas.isNotEmpty()) sb.append("\n").append(ctx.getString(R.string.ft_nao_movidos, falhas.joinToString()))
-        val longos = jogos(raiz).count { it.nome.length > 64 }
+        val longos = c.jogos.count { it.nome.length > 64 }
         if (longos > 0) sb.append("\n").append(ctx.getString(R.string.ft_nomes_longos, longos))
         return sb.toString()
     }
@@ -147,10 +223,10 @@ object Ferramentas {
     private fun arquivosArt(raiz: VFile): List<VFile> = pasta(raiz, "ART")?.listFiles()?.filter { it.isFile } ?: emptyList()
 
     /** Baixa as capas que faltam (banco xlenore/ps2-covers) e grava como PNG 8 bits: ART/<ID>_COV.png. */
-    fun baixarCapas(ctx: Context, raiz: VFile, maxL: Int, maxA: Int): String {
+    fun baixarCapas(ctx: Context, pasta: String, raiz: VFile, maxL: Int, maxA: Int): String {
         val art = pasta(raiz, "ART") ?: raiz.child("ART").also { it.mkdirs() }
         val existentes = arquivosArt(raiz).map { it.name.uppercase() }.toHashSet()
-        val lista = jogos(raiz)
+        val lista = jogosDe(raiz, atualizarCatalogo(ctx, pasta, raiz).jogos)
         var baixadas = 0
         var semId = 0
         val naoAchadas = mutableListOf<String>()

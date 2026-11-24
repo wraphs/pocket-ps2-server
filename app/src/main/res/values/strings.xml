@@ -146,7 +146,7 @@ RiptOPL with SMB2: same port and share; any user and password. The app answers S
     <string name="op_descompactar">Serve ZSO/CSO as ISO</string>
     <string name="ajuda_descompactar">Games in .zso and .cso show up to the PS2 as plain .iso, decompressed on the fly by the phone.\n\nThis lets NHDDL/Neutrino (UDPFS and UDPBD) run compressed games, which take much less space.\n\nOver SMB the .zso goes as is, since OPL reads ZSO by itself and the cable carries fewer bytes. The .cso becomes .iso over SMB too.\n\nIf an .iso with the same name exists, the compressed one is hidden.</string>
     <string name="ft_sec_pasta">OPL folder</string>
-    <string name="ft_ajuda_pasta">Show games: lists what is in DVD/ and CD/, with each game code (read from SYSTEM.CNF) and whether it has a cover.\n\nOrganize: creates the OPL folders (DVD, CD, ART, CFG, VMC…) and moves loose games from the root, or from other subfolders, into DVD/ (over 700 MB) or CD/. Nothing is deleted.</string>
+    <string name="ft_ajuda_pasta">The game list updates by itself every time you open the app: it looks for .iso, .zso and .cso in the whole folder (except ART, CFG, VMC, POPS and APPS) and reads each game code from SYSTEM.CNF. Only new or changed files are read again, so it is quick.\n\nShow games: shows the list, with the code, whether it has a cover and whether it is outside DVD/ and CD/.\n\nOrganize: creates the OPL folders and moves misplaced games into DVD/ (over 700 MB) or CD/. Nothing is deleted.</string>
     <string name="ft_sem_pasta_escolhida">Choose the games folder on the Server tab.</string>
     <string name="ft_btn_ver">Show games</string>
     <string name="ft_btn_organizar">Organize the folder</string>
@@ -172,7 +172,7 @@ RiptOPL with SMB2: same port and share; any user and password. The app answers S
     <string name="ft_lendo">Reading the games…</string>
     <string name="ft_nenhum_jogo">No games in DVD/ or CD/.</string>
     <string name="ft_sem_codigo">no code</string>
-    <string name="ft_legenda">🖼 = has cover   ▫ = no cover</string>
+    <string name="ft_legenda">🖼 = has cover   ▫ = no cover   📁 = outside DVD/CD (the PS2 cannot see it)</string>
     <string name="ft_cancelado">%1$s: cancelled.</string>
     <string name="ft_erro">%1$s: error — %2$s</string>
     <string name="ft_sem_pasta">folder %1$s not found</string>
@@ -197,4 +197,16 @@ RiptOPL with SMB2: same port and share; any user and password. The app answers S
     <string name="ajuda_http_antigo">RiptOPL and Docmine17\'s OPL-HTTP read games.csv in different formats, and the server cannot tell which one is on the other end.\n\nLeave it off for RiptOPL. Turn it on only for Docmine17\'s OPL-HTTP: the list then uses the simple format (up to ~200 games, no commas in names) and ZSO goes compressed.</string>
     <string name="srv_nfs">NFS · Neutrino, RiptOPL (TCP 2049)</string>
     <string name="ajuda_nfs">Neutrino (nfs: driver) and RiptOPL › NFS:\n• Server: %1$s\n• Port: 2049\n• Export: / (or /ps2)\n\nUses TCP, like HTTP: sturdier on cheap hubs. Neutrino only reads DVDs over NFS; RiptOPL also writes VMCs (the file must already exist).</string>
+    <string name="ft_btn_atualizar">Refresh the list now</string>
+    <string name="ft_resumo">%1$d game(s) · %2$d without cover · %3$d uncompressed ISO</string>
+    <string name="ft_resumo_vazio">Game list not built yet.</string>
+    <string name="ft_resumo_fora">📁 %1$d outside DVD/ and CD/ (the PS2 cannot see them): use Organize.</string>
+    <string name="ft_resumo_tar">ART/art.tar out of date.</string>
+    <string name="ft_sw_auto_tar">Rebuild art.tar automatically when covers change</string>
+    <string name="ft_sw_auto_zso">Compress new ISOs automatically (deletes the ISO after checking the ZSO; only while the server is stopped)</string>
+    <string name="ft_lista_ok">Game list updated.</string>
+    <string name="ft_lendo_jogo">Reading %1$s</string>
+    <string name="ft_atualizando">Updating the game list</string>
+    <string name="ft_auto_zso">Automatic compression:</string>
+    <string name="ft_auto_tar">Automatic art.tar:</string>
 </resources>

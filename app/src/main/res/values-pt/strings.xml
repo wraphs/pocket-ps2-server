@@ -145,7 +145,7 @@ RiptOPL com SMB2: mesma porta e mesmo compartilhamento; qualquer usuário e senh
     <string name="op_descompactar">Servir ZSO/CSO como ISO</string>
     <string name="ajuda_descompactar">Jogos .zso e .cso aparecem para o PS2 como .iso normais, descompactados na hora pelo celular.\n\nAssim o NHDDL/Neutrino (UDPFS e UDPBD) roda jogos compactados, que ocupam bem menos espaço.\n\nNo SMB o .zso continua indo como está, porque o OPL já lê ZSO sozinho e o cabo leva menos bytes. O .cso vira .iso também no SMB.\n\nSe já existir um .iso com o mesmo nome, o compactado fica escondido.</string>
     <string name="ft_sec_pasta">Pasta do OPL</string>
-    <string name="ft_ajuda_pasta">Ver jogos: lista o que está em DVD/ e CD/, com o código de cada jogo (lido do SYSTEM.CNF) e se ele já tem capa.\n\nOrganizar: cria as pastas do OPL (DVD, CD, ART, CFG, VMC…) e leva os jogos soltos na raiz, ou em outras subpastas, para DVD/ (mais de 700 MB) ou CD/. Nada é apagado.</string>
+    <string name="ft_ajuda_pasta">A lista de jogos é atualizada sozinha toda vez que você abre o app: procura .iso, .zso e .cso na pasta inteira (menos ART, CFG, VMC, POPS e APPS) e lê o código de cada jogo do SYSTEM.CNF. Só arquivos novos ou alterados são lidos de novo, então é rápido.\n\nVer jogos: mostra a lista, com o código, se tem capa e se está fora de DVD/ e CD/.\n\nOrganizar: cria as pastas do OPL e leva os jogos que estão fora do lugar para DVD/ (mais de 700 MB) ou CD/. Nada é apagado.</string>
     <string name="ft_sem_pasta_escolhida">Escolha a pasta dos jogos na aba Servidor.</string>
     <string name="ft_btn_ver">Ver jogos</string>
     <string name="ft_btn_organizar">Organizar a pasta</string>
@@ -171,7 +171,7 @@ RiptOPL com SMB2: mesma porta e mesmo compartilhamento; qualquer usuário e senh
     <string name="ft_lendo">Lendo os jogos…</string>
     <string name="ft_nenhum_jogo">Nenhum jogo em DVD/ ou CD/.</string>
     <string name="ft_sem_codigo">sem código</string>
-    <string name="ft_legenda">🖼 = tem capa   ▫ = sem capa</string>
+    <string name="ft_legenda">🖼 = tem capa   ▫ = sem capa   📁 = fora de DVD/CD (o PS2 não vê)</string>
     <string name="ft_cancelado">%1$s: cancelado.</string>
     <string name="ft_erro">%1$s: erro — %2$s</string>
     <string name="ft_sem_pasta">não achei a pasta %1$s</string>
@@ -196,4 +196,16 @@ RiptOPL com SMB2: mesma porta e mesmo compartilhamento; qualquer usuário e senh
     <string name="ajuda_http_antigo">O RiptOPL e o OPL-HTTP do Docmine17 leem o games.csv em formatos diferentes, e o servidor não tem como saber qual está do outro lado.\n\nDeixe desmarcado para o RiptOPL. Marque só se usa o OPL-HTTP do Docmine17: aí a lista fica no formato simples (até ~200 jogos, sem vírgula no nome) e o ZSO vai compactado.</string>
     <string name="srv_nfs">NFS · Neutrino, RiptOPL (TCP 2049)</string>
     <string name="ajuda_nfs">Neutrino (driver nfs:) e RiptOPL › NFS:\n• Servidor: %1$s\n• Porta: 2049\n• Export: / (ou /ps2)\n\nUsa TCP, como o HTTP: aguenta melhor hub barato. O Neutrino só lê DVD por NFS; o RiptOPL também grava VMC (o arquivo precisa já existir).</string>
+    <string name="ft_btn_atualizar">Atualizar a lista agora</string>
+    <string name="ft_resumo">%1$d jogo(s) · %2$d sem capa · %3$d ISO sem compactar</string>
+    <string name="ft_resumo_vazio">Lista de jogos ainda não montada.</string>
+    <string name="ft_resumo_fora">📁 %1$d fora de DVD/ e CD/ (o PS2 não vê): use Organizar.</string>
+    <string name="ft_resumo_tar">ART/art.tar desatualizado.</string>
+    <string name="ft_sw_auto_tar">Refazer o art.tar sozinho quando as capas mudarem</string>
+    <string name="ft_sw_auto_zso">Compactar ISOs novas sozinho (apaga a ISO depois de conferir o ZSO; só com o servidor parado)</string>
+    <string name="ft_lista_ok">Lista de jogos atualizada.</string>
+    <string name="ft_lendo_jogo">Lendo %1$s</string>
+    <string name="ft_atualizando">Atualizando a lista de jogos</string>
+    <string name="ft_auto_zso">Compactação automática:</string>
+    <string name="ft_auto_tar">art.tar automático:</string>
 </resources>

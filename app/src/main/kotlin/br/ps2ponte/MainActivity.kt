@@ -93,6 +93,7 @@ class MainActivity : Activity() {
     private lateinit var barraTarefa: android.widget.ProgressBar
     private lateinit var tvTarefaDetalhe: TextView
     private lateinit var tvFtPasta: TextView
+    private lateinit var tvResumo: TextView
     private val botoesFt = mutableListOf<Button>()
 
     private val handler = Handler(Looper.getMainLooper())
@@ -449,10 +450,14 @@ class MainActivity : Activity() {
         val cPasta = cartao(raiz)
         cPasta.addView(titulo(getString(R.string.ft_sec_pasta), getString(R.string.ft_sec_pasta)) { getString(R.string.ft_ajuda_pasta) })
         tvFtPasta = texto(tamanho = 14f).also { cPasta.addView(it) }
+        tvResumo = texto(tamanho = 14f).apply { setTypeface(typeface, Typeface.BOLD) }.also { cPasta.addView(it) }
         botoesFt += botao(getString(R.string.ft_btn_ver)) { verJogos() }.also { cPasta.addView(it) }
+        botoesFt += botao(getString(R.string.ft_btn_atualizar)) {
+            tarefa(getString(R.string.ft_btn_atualizar)) { _, _ -> "" }
+        }.also { cPasta.addView(it) }
         botoesFt += botao(getString(R.string.ft_btn_organizar)) {
             confirmar(getString(R.string.ft_btn_organizar), getString(R.string.ft_conf_organizar)) {
-                tarefa(getString(R.string.ft_btn_organizar)) { Ferramentas.organizar(this, it) }
+                tarefa(getString(R.string.ft_btn_organizar)) { pasta, r -> Ferramentas.organizar(this, pasta, r) }
             }
         }.also { cPasta.addView(it) }
 
@@ -468,27 +473,54 @@ class MainActivity : Activity() {
         cCapas.addView(grupoTam)
         botoesFt += botao(getString(R.string.ft_btn_baixar_capas)) {
             val grande = prefs.getBoolean("capa_grande", false)
-            tarefa(getString(R.string.ft_btn_baixar_capas)) { Ferramentas.baixarCapas(this, it, if (grande) 280 else 140, if (grande) 400 else 200) }
+            tarefa(getString(R.string.ft_btn_baixar_capas), arte = true) { pasta, r ->
+                Ferramentas.baixarCapas(this, pasta, r, if (grande) 280 else 140, if (grande) 400 else 200)
+            }
         }.also { cCapas.addView(it) }
         botoesFt += botao(getString(R.string.ft_btn_corrigir)) {
-            tarefa(getString(R.string.ft_btn_corrigir)) { Ferramentas.corrigirCapas(this, it) }
+            tarefa(getString(R.string.ft_btn_corrigir), arte = true) { _, r -> Ferramentas.corrigirCapas(this, r) }
         }.also { cCapas.addView(it) }
         botoesFt += botao(getString(R.string.ft_btn_tar)) {
-            tarefa(getString(R.string.ft_btn_tar)) { Ferramentas.empacotarArt(this, it) }
+            tarefa(getString(R.string.ft_btn_tar)) { _, r -> Ferramentas.empacotarArt(this, r) }
         }.also { cCapas.addView(linha(it, info(getString(R.string.ft_btn_tar)) { getString(R.string.ft_ajuda_tar) })) }
+        cCapas.addView(interruptor(Ferramentas.PREF_AUTO_TAR, getString(R.string.ft_sw_auto_tar)))
 
         val cComp = cartao(raiz)
         cComp.addView(titulo(getString(R.string.ft_sec_compactar), getString(R.string.ft_sec_compactar)) { getString(R.string.ft_ajuda_compactar) })
+        cComp.addView(interruptor(Ferramentas.PREF_AUTO_ZSO, getString(R.string.ft_sw_auto_zso)))
         botoesFt += botao(getString(R.string.ft_btn_compactar)) { escolherJogos(compactar = true) }.also { cComp.addView(it) }
         botoesFt += botao(getString(R.string.ft_btn_descompactar)) { escolherJogos(compactar = false) }.also { cComp.addView(it) }
 
         return raiz
     }
 
+    /** Interruptor ligado a uma preferência; ao ligar, já roda a rotina automática na pasta atual. */
+    private fun interruptor(chave: String, rotulo: String) = android.widget.Switch(this).apply {
+        text = rotulo
+        isChecked = prefs.getBoolean(chave, false)
+        setPadding(0, dp(8), 0, dp(4))
+        setOnCheckedChangeListener { _, m ->
+            prefs.edit().putBoolean(chave, m).apply()
+            if (m) pastaSalva()?.takeIf { pastaAbriu == true && rbPasta.isChecked }?.let { Ferramentas.rotina(this@MainActivity, it, forcar = true) }
+        }
+    }
+
     private fun atualizarFerramentas() {
         if (!::tvFtPasta.isInitialized) return
         val pasta = pastaSalva()
-        tvFtPasta.text = if (pasta == null || !rbPasta.isChecked) getString(R.string.ft_sem_pasta_escolhida) else Fonte.descricao(this, pasta)
+        val usavel = pasta != null && rbPasta.isChecked
+        tvFtPasta.text = if (!usavel) getString(R.string.ft_sem_pasta_escolhida) else Fonte.descricao(this, pasta!!)
+        val c = if (usavel) Ferramentas.catalogo else null
+        tvResumo.text = when {
+            !usavel -> ""
+            c == null -> getString(R.string.ft_resumo_vazio)
+            else -> buildString {
+                append(getString(R.string.ft_resumo, c.jogos.size, c.semCapa, c.isos.size))
+                if (c.foraDoLugar > 0) append("\n").append(getString(R.string.ft_resumo_fora, c.foraDoLugar))
+                if (c.tarDesatualizado && c.tarData > 0) append("\n").append(getString(R.string.ft_resumo_tar))
+            }
+        }
+        tvResumo.visibility = if (tvResumo.text.isEmpty()) View.GONE else View.VISIBLE
         val ocupado = Ferramentas.ocupado
         cartaoTarefa.visibility = if (ocupado) View.VISIBLE else View.GONE
         if (ocupado) {
@@ -497,7 +529,7 @@ class MainActivity : Activity() {
             if (Ferramentas.progresso >= 0) barraTarefa.progress = Ferramentas.progresso
             tvTarefaDetalhe.text = Ferramentas.detalhe
         }
-        val pode = !ocupado && pasta != null && rbPasta.isChecked
+        val pode = !ocupado && usavel
         for (b in botoesFt) b.isEnabled = pode
     }
 
@@ -507,71 +539,65 @@ class MainActivity : Activity() {
             .setNegativeButton(R.string.cancelar, null).show()
     }
 
-    /** Roda uma ferramenta na pasta escolhida (a raiz é aberta já na thread da tarefa). */
-    private fun tarefa(nome: String, corpo: (br.ps2ponte.core.fs.VFile) -> String) {
+    /**
+     * Roda uma ferramenta na pasta escolhida (a raiz é aberta já na thread da tarefa). No fim, o catálogo é
+     * atualizado e, se [arte] e o interruptor estiver ligado, o art.tar é refeito.
+     */
+    private fun tarefa(nome: String, arte: Boolean = false, corpo: (String, br.ps2ponte.core.fs.VFile) -> String) {
         val pasta = pastaSalva() ?: return aviso(getString(R.string.av_escolha_pasta))
-        Ferramentas.rodar(this, nome) { corpo(Fonte.raiz(this, pasta)) }
+        Ferramentas.rodar(this, nome) {
+            val r = Fonte.raiz(this, pasta)
+            val res = corpo(pasta, r)
+            (res + Ferramentas.depois(this, pasta, r, arte)).trim().ifEmpty { getString(R.string.ft_lista_ok) }
+        }
     }
 
-    /** Lista os jogos (com o código e se têm capa) numa thread e mostra num diálogo. */
+    /** Lista do catálogo (sem abrir nada: é instantâneo). */
     private fun verJogos() {
-        val pasta = pastaSalva() ?: return
-        aviso(getString(R.string.ft_lendo))
-        fundo.execute {
-            val texto = try {
-                val raiz = Fonte.raiz(this, pasta)
-                val art = raiz.listFiles()?.firstOrNull { it.isDirectory && it.name.equals("ART", true) }
-                    ?.listFiles()?.map { it.name.uppercase() }?.toHashSet() ?: hashSetOf()
-                val lista = Ferramentas.jogos(raiz)
-                if (lista.isEmpty()) getString(R.string.ft_nenhum_jogo)
-                else lista.joinToString("\n") { j ->
-                    val id = Ferramentas.lerId(j)
-                    val capa = id != null && art.any { it.startsWith("${id}_COV.") }
-                    val mb = j.arquivo.length() / (1024 * 1024)
-                    "${if (capa) "🖼" else "▫"} ${j.pasta}/${j.nome}\n     ${id ?: getString(R.string.ft_sem_codigo)} · $mb MiB"
-                } + "\n\n" + getString(R.string.ft_legenda)
-            } catch (e: Exception) {
-                getString(R.string.pasta_erro, e.message ?: e.javaClass.simpleName)
-            }
-            runOnUiThread { if (!isFinishing) dialogo(getString(R.string.ft_btn_ver), texto) }
+        val c = Ferramentas.catalogo
+        if (c == null) {
+            aviso(getString(R.string.ft_lendo))
+            tarefa(getString(R.string.ft_btn_atualizar)) { _, _ -> "" }
+            return
         }
+        val texto = if (c.jogos.isEmpty()) getString(R.string.ft_nenhum_jogo)
+        else c.jogos.joinToString("\n") { j ->
+            val marca = when {
+                j.foraDoLugar -> "📁"
+                c.temCapa(j) -> "🖼"
+                else -> "▫"
+            }
+            "$marca ${j.rel}\n     ${j.id ?: getString(R.string.ft_sem_codigo)} · ${j.tamanho / (1024 * 1024)} MiB"
+        } + "\n\n" + getString(R.string.ft_legenda)
+        dialogo(getString(R.string.ft_btn_ver), texto)
     }
 
     /** Escolhe quais jogos compactar (ISO) ou descompactar (ZSO/CSO), e se apaga os originais. */
     private fun escolherJogos(compactar: Boolean) {
-        val pasta = pastaSalva() ?: return
-        fundo.execute {
-            val lista = try {
-                Ferramentas.jogos(Fonte.raiz(this, pasta)).filter { it.compactado != compactar }
-            } catch (e: Exception) {
-                runOnUiThread { aviso(getString(R.string.pasta_erro, e.message ?: "")) }
-                return@execute
-            }
-            runOnUiThread {
-                if (isFinishing) return@runOnUiThread
-                if (lista.isEmpty()) return@runOnUiThread aviso(getString(if (compactar) R.string.ft_nada_compactar else R.string.ft_nada_descompactar))
-                val marcados = BooleanArray(lista.size)
-                val nomes = lista.map { "${it.pasta}/${it.nome}  (${it.arquivo.length() / (1024 * 1024)} MiB)" }.toTypedArray()
-                val titulo = getString(if (compactar) R.string.ft_btn_compactar else R.string.ft_btn_descompactar)
-                AlertDialog.Builder(this).setTitle(titulo)
-                    .setMultiChoiceItems(nomes, marcados) { _, i, m -> marcados[i] = m }
-                    .setPositiveButton(R.string.ok) { _, _ ->
-                        val escolhidos = lista.filterIndexed { i, _ -> marcados[i] }
-                        if (escolhidos.isEmpty()) return@setPositiveButton
-                        val fazer = { apagar: Boolean ->
-                            tarefa(titulo) { _ ->
-                                if (compactar) Ferramentas.compactar(this, escolhidos, apagar) else Ferramentas.descompactar(this, escolhidos, apagar)
-                            }
-                        }
-                        AlertDialog.Builder(this).setTitle(titulo)
-                            .setMessage(getString(if (compactar) R.string.ft_conf_compactar else R.string.ft_conf_descompactar, escolhidos.size))
-                            .setPositiveButton(R.string.ft_manter) { _, _ -> fazer(false) }
-                            .setNeutralButton(R.string.ft_apagar) { _, _ -> fazer(true) }
-                            .setNegativeButton(R.string.cancelar, null).show()
+        val c = Ferramentas.catalogo ?: return verJogos()
+        val lista = c.jogos.filter { it.compactado != compactar }
+        if (lista.isEmpty()) return aviso(getString(if (compactar) R.string.ft_nada_compactar else R.string.ft_nada_descompactar))
+        val marcados = BooleanArray(lista.size)
+        val nomes = lista.map { "${it.rel}  (${it.tamanho / (1024 * 1024)} MiB)" }.toTypedArray()
+        val titulo = getString(if (compactar) R.string.ft_btn_compactar else R.string.ft_btn_descompactar)
+        AlertDialog.Builder(this).setTitle(titulo)
+            .setMultiChoiceItems(nomes, marcados) { _, i, m -> marcados[i] = m }
+            .setPositiveButton(R.string.ok) { _, _ ->
+                val escolhidos = lista.filterIndexed { i, _ -> marcados[i] }
+                if (escolhidos.isEmpty()) return@setPositiveButton
+                val fazer = { apagar: Boolean ->
+                    tarefa(titulo) { _, r ->
+                        val jogos = Ferramentas.jogosDe(r, escolhidos)
+                        if (compactar) Ferramentas.compactar(this, jogos, apagar) else Ferramentas.descompactar(this, jogos, apagar)
                     }
+                }
+                AlertDialog.Builder(this).setTitle(titulo)
+                    .setMessage(getString(if (compactar) R.string.ft_conf_compactar else R.string.ft_conf_descompactar, escolhidos.size))
+                    .setPositiveButton(R.string.ft_manter) { _, _ -> fazer(false) }
+                    .setNeutralButton(R.string.ft_apagar) { _, _ -> fazer(true) }
                     .setNegativeButton(R.string.cancelar, null).show()
             }
-        }
+            .setNegativeButton(R.string.cancelar, null).show()
     }
 
     private fun caixaServidor(pai: LinearLayout, chave: String, rotulo: String, ajuda: () -> String): CheckBox {
@@ -721,7 +747,14 @@ class MainActivity : Activity() {
         }
         tvPasta.text = "$descricao  $estado"
         btnCriarPastas.visibility = if (temOpl == false) View.VISIBLE else View.GONE
-        if (temOpl != null) escolhaAberta = false
+        if (temOpl != null) {
+            escolhaAberta = false
+            // Pasta abriu: catálogo de jogos em dia (e compactação/art.tar automáticos, se ligados)
+            pastaSalva()?.takeIf { rbPasta.isChecked }?.let {
+                Ferramentas.carregarCatalogo(this, it)
+                Ferramentas.rotina(this, it)
+            }
+        }
         atualizarEscolha()
         atualizarPermissoes()
         atualizarEstado()
