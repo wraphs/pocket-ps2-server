@@ -73,6 +73,11 @@ internal class SmbConnection(private val srv: SmbServer, private val sock: Socke
                 when (type) {
                     0x00 -> {  // mensagem: comprimento de 24 bits (TCP direto)
                         readMessage((b1 shl 16) or (b2 shl 8) or b3)
+                        if (req.len >= 4 && req.b[0] == 0xFE.toByte() && srv.smb2) {
+                            // Cliente SMB2 (RiptOPL/Neutrino com usmb2): a conexão passa para o SMB2
+                            Smb2Connection(srv, sock, ip, inp, outs).rodar(req.b, req.len)
+                            return
+                        }
                         if (!handle()) return
                     }
                     0x81 -> {  // pedido de sessão NetBIOS (porta 139): responde positivo

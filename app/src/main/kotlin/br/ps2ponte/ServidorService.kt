@@ -201,7 +201,7 @@ class ServidorService : Service() {
     }
 
     private fun descricao(s: PonteServer) = when (s) {
-        is SmbServer -> "SMB1 (TCP $PORTA_SMB)"
+        is SmbServer -> "SMB1/2 (TCP $PORTA_SMB)"
         is HttpServer -> "HTTP (TCP ${HttpServer.PORT})"
         is UdpfsServer -> "UDPFS (UDP ${UdpfsServer.PORT})"
         is UdpbdServer -> "UDPBD (UDP ${UdpbdServer.PORT})"

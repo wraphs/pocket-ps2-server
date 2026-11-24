@@ -16,7 +16,7 @@ object Dicas {
             "rede indisponível" in m || "network unavailable" in m -> R.string.dica_rede_oscilou
             "não confirmou" in m || "did not acknowledge" in m -> R.string.dica_ps2_parou
             m.startsWith("smb:") && ("desconectou" in m || "disconnected" in m) && "eofexception" !in m -> R.string.dica_conexao_caiu
-            "smb2" in m -> R.string.dica_smb2
+            "tentou smb2" in m || "tried smb2" in m -> R.string.dica_smb2
             "acesso root caiu" in m || "acesso shizuku caiu" in m || "access stopped" in m -> R.string.dica_acesso_caiu
             "erro ao ler" in m || "erro de leitura" in m || "error reading" in m || "read error" in m ||
                 "erro ao abrir" in m || "error opening" in m -> R.string.dica_leitura

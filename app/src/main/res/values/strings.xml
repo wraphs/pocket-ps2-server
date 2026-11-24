@@ -69,10 +69,12 @@
     <string name="sec_ps2">3 · On the PS2</string>
     <string name="btn_config_ps2">How to set up the PS2</string>
     <string name="servidores">Servers</string>
-    <string name="srv_smb">SMB1 · OPL</string>
+    <string name="srv_smb">SMB1/SMB2 · OPL, RiptOPL (TCP 1445)</string>
     <string name="srv_udpfs">UDPFS · NHDDL, Neutrino, RiptOPL</string>
     <string name="srv_udpbd">UDPBD · Neutrino, XEB+, RiptOPL</string>
-    <string name="ajuda_smb">OPL / RiptOPL › Network Settings:\n• IP Address Type: DHCP (or %2$s)\n• Address: %1$s\n• Port: %3$d\n• Share: PS2SMB · User: guest · Password: empty\n• ETH Start Mode: Auto; save and restart OPL.</string>
+    <string name="ajuda_smb">OPL / RiptOPL › Network Settings:\n• IP Address Type: DHCP (or %2$s)\n• Address: %1$s\n• Port: %3$d\n• Share: PS2SMB · User: guest · Password: empty\n• ETH Start Mode: Auto; save and restart OPL.
+
+RiptOPL with SMB2: same port and share; any user and password. The app answers SMB1 and SMB2 on the same port.</string>
     <string name="ajuda_udpfs">Faster than SMB. Serves the folder (and the virtual disk).\n\nNHDDL: nhddl.yaml with\n  mode: udpfs\n  udpfs_ip: %1$s\nNeutrino: config/bsd-udpfs.toml → args = ["ip=%1$s"]\nRiptOPL: use the same PS2 IP as in the network settings.</string>
     <string name="ajuda_udpbd">Block device: the PS2 sees an exFAT disk (the folder as a virtual disk, or the whole USB drive).\n\nNeutrino: config/bsd-udpbd.toml → args = ["ip=%1$s"]\nRiptOPL / XEB+: UDPBD device, with PS2 IP %1$s.</string>
     <string name="config_ps2_titulo">PS2 setup</string>

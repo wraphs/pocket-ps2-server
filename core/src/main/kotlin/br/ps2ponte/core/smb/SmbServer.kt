@@ -29,6 +29,8 @@ class SmbServer(
     private val log: EventLog = NoLog,
     private val stats: TransferStats = TransferStats(),
     val unicode: Boolean = true,
+    /** Também atende SMB2 (2.0.2/2.1) na mesma porta, para o RiptOPL e o Neutrino. */
+    val smb2: Boolean = true,
 ) : PonteServer {
     override val name = "SMB1"
 
