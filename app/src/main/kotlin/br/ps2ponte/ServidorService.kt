@@ -24,6 +24,7 @@ import br.ps2ponte.core.block.Sector512Adapter
 import br.ps2ponte.core.exfat.VirtualExFat
 import br.ps2ponte.core.fs.ArvoreIso
 import br.ps2ponte.core.fs.LocalTree
+import br.ps2ponte.core.http.HttpServer
 import br.ps2ponte.core.smb.SmbServer
 import br.ps2ponte.core.udpbd.UdpbdServer
 import br.ps2ponte.core.udpfs.UdpfsServer
@@ -116,11 +117,18 @@ class ServidorService : Service() {
                 Estado.log(getString(R.string.log_pasta, nome))
                 // Jogos .zso/.cso aparecem como .iso, descompactados na hora. No SMB o ZSO vai como está:
                 // o OPL lê ZSO sozinho (e o cabo leva menos bytes)
-                val descompactar = getSharedPreferences("ps2ponte", MODE_PRIVATE).getBoolean(PREF_DESCOMPACTAR, true)
+                val prefs = getSharedPreferences("ps2ponte", MODE_PRIVATE)
+                val descompactar = prefs.getBoolean(PREF_DESCOMPACTAR, true)
                 val raizIso = if (descompactar) ArvoreIso(raiz, zso = true) else raiz
                 val raizSmb = if (descompactar) ArvoreIso(raiz, zso = false) else raiz
                 val tree = LocalTree(raizIso)
                 if (SRV_SMB in srv) novos += SmbServer(LocalTree(raizSmb), port = PORTA_SMB, shareName = "PS2SMB", log = log, stats = stats)
+                if (SRV_HTTP in srv) {
+                    // O RiptOPL não abre ZSO pelo HTTP (vai descompactado); o OPL-HTTP antigo lê ZSO sozinho
+                    val ript = prefs.getBoolean(PREF_HTTP_RIPTOPL, true)
+                    val raizHttp = if (descompactar) ArvoreIso(raiz, zso = ript) else raiz
+                    novos += HttpServer(raizHttp, port = HttpServer.PORT, riptopl = ript, log = log, stats = stats)
+                }
                 // O disco virtual atende o UDPBD e o modo bloco do UDPFS
                 var exfat: VirtualExFat? = null
                 if (SRV_UDPBD in srv || SRV_UDPFS in srv) {
@@ -194,6 +202,7 @@ class ServidorService : Service() {
 
     private fun descricao(s: PonteServer) = when (s) {
         is SmbServer -> "SMB1 (TCP $PORTA_SMB)"
+        is HttpServer -> "HTTP (TCP ${HttpServer.PORT})"
         is UdpfsServer -> "UDPFS (UDP ${UdpfsServer.PORT})"
         is UdpbdServer -> "UDPBD (UDP ${UdpbdServer.PORT})"
         else -> s.name
@@ -288,8 +297,10 @@ class ServidorService : Service() {
         const val SRV_SMB = "smb"
         const val SRV_UDPFS = "udpfs"
         const val SRV_UDPBD = "udpbd"
+        const val SRV_HTTP = "http"
         const val PORTA_SMB = 1445
         const val PREF_DESCOMPACTAR = "descompactar"
+        const val PREF_HTTP_RIPTOPL = "http_riptopl"
         private const val CANAL = "servidor"
 
         fun iniciar(ctx: Context, modo: String, pasta: String?, usb: String?, servidores: Set<String>) {

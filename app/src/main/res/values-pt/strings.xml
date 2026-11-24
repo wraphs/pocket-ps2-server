@@ -141,41 +141,23 @@
     <string name="btn_trocar_pasta">Trocar a pasta…</string>
     <string name="btn_fechar_escolha">Fechar</string>
     <string name="op_descompactar">Servir ZSO/CSO como ISO</string>
-    <string name="ajuda_descompactar">Jogos .zso e .cso aparecem para o PS2 como .iso normais, descompactados na hora pelo celular.
-
-Assim o NHDDL/Neutrino (UDPFS e UDPBD) roda jogos compactados, que ocupam bem menos espaço.
-
-No SMB o .zso continua indo como está, porque o OPL já lê ZSO sozinho e o cabo leva menos bytes. O .cso vira .iso também no SMB.
-
-Se já existir um .iso com o mesmo nome, o compactado fica escondido.</string>
+    <string name="ajuda_descompactar">Jogos .zso e .cso aparecem para o PS2 como .iso normais, descompactados na hora pelo celular.\n\nAssim o NHDDL/Neutrino (UDPFS e UDPBD) roda jogos compactados, que ocupam bem menos espaço.\n\nNo SMB o .zso continua indo como está, porque o OPL já lê ZSO sozinho e o cabo leva menos bytes. O .cso vira .iso também no SMB.\n\nSe já existir um .iso com o mesmo nome, o compactado fica escondido.</string>
     <string name="ft_sec_pasta">Pasta do OPL</string>
-    <string name="ft_ajuda_pasta">Ver jogos: lista o que está em DVD/ e CD/, com o código de cada jogo (lido do SYSTEM.CNF) e se ele já tem capa.
-
-Organizar: cria as pastas do OPL (DVD, CD, ART, CFG, VMC…) e leva os jogos soltos na raiz, ou em outras subpastas, para DVD/ (mais de 700 MB) ou CD/. Nada é apagado.</string>
+    <string name="ft_ajuda_pasta">Ver jogos: lista o que está em DVD/ e CD/, com o código de cada jogo (lido do SYSTEM.CNF) e se ele já tem capa.\n\nOrganizar: cria as pastas do OPL (DVD, CD, ART, CFG, VMC…) e leva os jogos soltos na raiz, ou em outras subpastas, para DVD/ (mais de 700 MB) ou CD/. Nada é apagado.</string>
     <string name="ft_sem_pasta_escolhida">Escolha a pasta dos jogos na aba Servidor.</string>
     <string name="ft_btn_ver">Ver jogos</string>
     <string name="ft_btn_organizar">Organizar a pasta</string>
     <string name="ft_conf_organizar">Criar as pastas do OPL e mover os jogos soltos para DVD/ e CD/?</string>
     <string name="ft_sec_capas">Capas</string>
-    <string name="ft_ajuda_capas">Baixar: procura a capa de cada jogo sem capa pelo código (banco xlenore/ps2-covers, precisa de internet no celular) e grava em ART/&lt;código>_COV.png.
-
-Converter: transforma JPG/WebP/BMP/PNG da pasta ART em PNG de 8 bits (256 cores), o formato que o OPL e o RiptOPL leem sem erro e que carrega mais rápido.
-
-Tamanho: 140×200 é o padrão do OPL; 280×400 é o padrão do RiptOPL.</string>
+    <string name="ft_ajuda_capas">Baixar: procura a capa de cada jogo sem capa pelo código (banco xlenore/ps2-covers, precisa de internet no celular) e grava em ART/&lt;código>_COV.png.\n\nConverter: transforma JPG/WebP/BMP/PNG da pasta ART em PNG de 8 bits (256 cores), o formato que o OPL e o RiptOPL leem sem erro e que carrega mais rápido.\n\nTamanho: 140×200 é o padrão do OPL; 280×400 é o padrão do RiptOPL.</string>
     <string name="ft_capa_opl">140×200 (OPL)</string>
     <string name="ft_capa_ript">280×400 (RiptOPL)</string>
     <string name="ft_btn_baixar_capas">Baixar capas que faltam</string>
     <string name="ft_btn_corrigir">Converter capas para PNG 8-bit</string>
     <string name="ft_btn_tar">Empacotar ART/art.tar</string>
-    <string name="ft_ajuda_tar">Junta todas as imagens PNG da pasta ART num só arquivo ART/art.tar (sem compactação). O RiptOPL lê as capas desse arquivo muito mais rápido que de centenas de arquivos soltos (ative em Interface › Artwork Settings). Os arquivos soltos continuam lá, para o OPL comum.
-
-Refaça depois de baixar capas novas.</string>
+    <string name="ft_ajuda_tar">Junta todas as imagens PNG da pasta ART num só arquivo ART/art.tar (sem compactação). O RiptOPL lê as capas desse arquivo muito mais rápido que de centenas de arquivos soltos (ative em Interface › Artwork Settings). Os arquivos soltos continuam lá, para o OPL comum.\n\nRefaça depois de baixar capas novas.</string>
     <string name="ft_sec_compactar">Compactar jogos</string>
-    <string name="ft_ajuda_compactar">Compactar: ISO → ZSO (LZ4), que ocupa menos espaço. O OPL lê ZSO direto; para o NHDDL/Neutrino o app descompacta na hora (opção \"Servir ZSO/CSO como ISO\" no Avançado). Antes de apagar qualquer coisa, o ZSO novo é conferido com a ISO.
-
-Descompactar: ZSO/CSO → ISO.
-
-Pode demorar alguns minutos por jogo em celular mais fraco; dá para usar outros apps enquanto isso.</string>
+    <string name="ft_ajuda_compactar">Compactar: ISO → ZSO (LZ4), que ocupa menos espaço. O OPL lê ZSO direto; para o NHDDL/Neutrino o app descompacta na hora (opção \"Servir ZSO/CSO como ISO\" no Avançado). Antes de apagar qualquer coisa, o ZSO novo é conferido com a ISO.\n\nDescompactar: ZSO/CSO → ISO.\n\nPode demorar alguns minutos por jogo em celular mais fraco; dá para usar outros apps enquanto isso.</string>
     <string name="ft_btn_compactar">Compactar ISO → ZSO…</string>
     <string name="ft_btn_descompactar">Descompactar ZSO/CSO → ISO…</string>
     <string name="ft_conf_compactar">Compactar %1$d jogo(s). Depois de conferido, apagar a ISO original para liberar espaço?</string>
@@ -206,4 +188,8 @@ Pode demorar alguns minutos por jogo em celular mais fraco; dá para usar outros
     <string name="ft_sem_espaco">sem espaço livre para %1$s</string>
     <string name="ft_compactados">%1$d jogo(s) compactado(s); %2$.0f MiB economizados.</string>
     <string name="ft_descompactados">%1$d jogo(s) descompactado(s).</string>
+    <string name="srv_http">HTTP · RiptOPL (TCP 1100)</string>
+    <string name="ajuda_http">RiptOPL › Network Settings:\n• Protocol: HTTP\n• Address: %1$s\n• Port: 1100 (preencha sempre: com 0 o loader usa portas diferentes para a lista e para o jogo)\n• Base path: / (ou vazio)\n\nUsa TCP: não perde pacote em hub barato, ao contrário do UDP. Só leitura: sem VMC pelo HTTP. DVD de duas camadas (DVD9) pode não funcionar por limite do loader.</string>
+    <string name="op_http_antigo">Lista para o OPL-HTTP antigo</string>
+    <string name="ajuda_http_antigo">O RiptOPL e o OPL-HTTP do Docmine17 leem o games.csv em formatos diferentes, e o servidor não tem como saber qual está do outro lado.\n\nDeixe desmarcado para o RiptOPL. Marque só se usa o OPL-HTTP do Docmine17: aí a lista fica no formato simples (até ~200 jogos, sem vírgula no nome) e o ZSO vai compactado.</string>
 </resources>

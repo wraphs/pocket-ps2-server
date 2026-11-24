@@ -142,41 +142,23 @@
     <string name="btn_trocar_pasta">Change folder…</string>
     <string name="btn_fechar_escolha">Close</string>
     <string name="op_descompactar">Serve ZSO/CSO as ISO</string>
-    <string name="ajuda_descompactar">Games in .zso and .cso show up to the PS2 as plain .iso, decompressed on the fly by the phone.
-
-This lets NHDDL/Neutrino (UDPFS and UDPBD) run compressed games, which take much less space.
-
-Over SMB the .zso goes as is, since OPL reads ZSO by itself and the cable carries fewer bytes. The .cso becomes .iso over SMB too.
-
-If an .iso with the same name exists, the compressed one is hidden.</string>
+    <string name="ajuda_descompactar">Games in .zso and .cso show up to the PS2 as plain .iso, decompressed on the fly by the phone.\n\nThis lets NHDDL/Neutrino (UDPFS and UDPBD) run compressed games, which take much less space.\n\nOver SMB the .zso goes as is, since OPL reads ZSO by itself and the cable carries fewer bytes. The .cso becomes .iso over SMB too.\n\nIf an .iso with the same name exists, the compressed one is hidden.</string>
     <string name="ft_sec_pasta">OPL folder</string>
-    <string name="ft_ajuda_pasta">Show games: lists what is in DVD/ and CD/, with each game code (read from SYSTEM.CNF) and whether it has a cover.
-
-Organize: creates the OPL folders (DVD, CD, ART, CFG, VMC…) and moves loose games from the root, or from other subfolders, into DVD/ (over 700 MB) or CD/. Nothing is deleted.</string>
+    <string name="ft_ajuda_pasta">Show games: lists what is in DVD/ and CD/, with each game code (read from SYSTEM.CNF) and whether it has a cover.\n\nOrganize: creates the OPL folders (DVD, CD, ART, CFG, VMC…) and moves loose games from the root, or from other subfolders, into DVD/ (over 700 MB) or CD/. Nothing is deleted.</string>
     <string name="ft_sem_pasta_escolhida">Choose the games folder on the Server tab.</string>
     <string name="ft_btn_ver">Show games</string>
     <string name="ft_btn_organizar">Organize the folder</string>
     <string name="ft_conf_organizar">Create the OPL folders and move loose games into DVD/ and CD/?</string>
     <string name="ft_sec_capas">Covers</string>
-    <string name="ft_ajuda_capas">Download: looks up the cover of each game without one by its code (xlenore/ps2-covers database, needs internet on the phone) and saves it as ART/&lt;code>_COV.png.
-
-Convert: turns JPG/WebP/BMP/PNG in the ART folder into 8-bit PNG (256 colors), the format OPL and RiptOPL read without errors and load faster.
-
-Size: 140×200 is the OPL standard; 280×400 is the RiptOPL standard.</string>
+    <string name="ft_ajuda_capas">Download: looks up the cover of each game without one by its code (xlenore/ps2-covers database, needs internet on the phone) and saves it as ART/&lt;code>_COV.png.\n\nConvert: turns JPG/WebP/BMP/PNG in the ART folder into 8-bit PNG (256 colors), the format OPL and RiptOPL read without errors and load faster.\n\nSize: 140×200 is the OPL standard; 280×400 is the RiptOPL standard.</string>
     <string name="ft_capa_opl">140×200 (OPL)</string>
     <string name="ft_capa_ript">280×400 (RiptOPL)</string>
     <string name="ft_btn_baixar_capas">Download missing covers</string>
     <string name="ft_btn_corrigir">Convert covers to 8-bit PNG</string>
     <string name="ft_btn_tar">Pack ART/art.tar</string>
-    <string name="ft_ajuda_tar">Packs every PNG in the ART folder into one file, ART/art.tar (uncompressed). RiptOPL reads covers from it much faster than from hundreds of loose files (turn it on in Interface › Artwork Settings). The loose files stay, for regular OPL.
-
-Redo it after downloading new covers.</string>
+    <string name="ft_ajuda_tar">Packs every PNG in the ART folder into one file, ART/art.tar (uncompressed). RiptOPL reads covers from it much faster than from hundreds of loose files (turn it on in Interface › Artwork Settings). The loose files stay, for regular OPL.\n\nRedo it after downloading new covers.</string>
     <string name="ft_sec_compactar">Compress games</string>
-    <string name="ft_ajuda_compactar">Compress: ISO → ZSO (LZ4), which takes less space. OPL reads ZSO directly; for NHDDL/Neutrino the app decompresses on the fly (\"Serve ZSO/CSO as ISO\" in Advanced). Before anything is deleted, the new ZSO is checked against the ISO.
-
-Decompress: ZSO/CSO → ISO.
-
-It may take a few minutes per game on a slower phone; you can use other apps meanwhile.</string>
+    <string name="ft_ajuda_compactar">Compress: ISO → ZSO (LZ4), which takes less space. OPL reads ZSO directly; for NHDDL/Neutrino the app decompresses on the fly (\"Serve ZSO/CSO as ISO\" in Advanced). Before anything is deleted, the new ZSO is checked against the ISO.\n\nDecompress: ZSO/CSO → ISO.\n\nIt may take a few minutes per game on a slower phone; you can use other apps meanwhile.</string>
     <string name="ft_btn_compactar">Compress ISO → ZSO…</string>
     <string name="ft_btn_descompactar">Decompress ZSO/CSO → ISO…</string>
     <string name="ft_conf_compactar">Compress %1$d game(s). Once checked, delete the original ISO to free space?</string>
@@ -207,4 +189,8 @@ It may take a few minutes per game on a slower phone; you can use other apps mea
     <string name="ft_sem_espaco">not enough free space for %1$s</string>
     <string name="ft_compactados">%1$d game(s) compressed; %2$.0f MiB saved.</string>
     <string name="ft_descompactados">%1$d game(s) decompressed.</string>
+    <string name="srv_http">HTTP · RiptOPL (TCP 1100)</string>
+    <string name="ajuda_http">RiptOPL › Network Settings:\n• Protocol: HTTP\n• Address: %1$s\n• Port: 1100 (always fill it in: with 0 the loader uses different ports for the list and for the game)\n• Base path: / (or blank)\n\nUses TCP: no lost packets on cheap hubs, unlike UDP. Read-only: no VMC over HTTP. Dual-layer DVD9 may not work because of a loader limit.</string>
+    <string name="op_http_antigo">List for the older OPL-HTTP</string>
+    <string name="ajuda_http_antigo">RiptOPL and Docmine17\'s OPL-HTTP read games.csv in different formats, and the server cannot tell which one is on the other end.\n\nLeave it off for RiptOPL. Turn it on only for Docmine17\'s OPL-HTTP: the list then uses the simple format (up to ~200 games, no commas in names) and ZSO goes compressed.</string>
 </resources>
