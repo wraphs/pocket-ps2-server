@@ -99,6 +99,15 @@ python scripts/ps2_udpbd_cliente.py --imagem <exfat.img>
 
 Protocol references: Neutrino (`iop/udpbd`, `iop/udpfs`, `pc/udpfs_server.py`), `udpbd-server`, ps2sdk `smbman` and OPL `cdvdman/smb.c`.
 
+## Roadmap
+
+The goal: turn a phone — maybe the old one sitting in a drawer — into a complete companion for everything the PS2 network port can do.
+
+- **Online play:** share the phone's internet (Wi-Fi or mobile data) with the PS2 over the same cable, with the DNS settings that revived online services need.
+- **Game manager:** rename and delete games, per-game OPL settings (compatibility modes, VMC), backgrounds and screenshots in the game view.
+- **More formats:** CHD (needs real test images).
+- **Hardware feedback:** most new servers (SMB2, NFS, HTTP) and the PS1 tools are tested against code that imitates the PS2 clients, not on a console yet. Reports are very welcome.
+
 ## License
 
 [GPL-3.0](LICENSE). PlayStation 2 is a trademark of Sony Interactive Entertainment; this project is not affiliated with Sony. Use it with games you own.
@@ -119,3 +128,5 @@ App Android que serve jogos para o PlayStation 2 pelo cabo de rede: **celular �
 - Android 5.0 ou mais novo. A ancoragem Ethernet vem de fábrica no Android 11+; em aparelhos mais antigos pode aparecer com ROMs como a LineageOS.
 
 Passo a passo: ligue o hub, ative **Ancoragem Ethernet**, escolha a pasta dos jogos, toque em **Iniciar** e configure o loader com os valores que o app mostra em *Como configurar o PS2*. Guia completo: [docs/GUIA.md](docs/GUIA.md).
+
+**Próximos passos:** transformar o celular (talvez aquele no fundo da gaveta) numa solução completa para tudo o que a porta de rede do PS2 oferece — inclusive passar a internet do celular pelo cabo para jogar online, gerenciar os jogos como um OPL Manager (renomear, apagar, configurações por jogo) e CHD.
