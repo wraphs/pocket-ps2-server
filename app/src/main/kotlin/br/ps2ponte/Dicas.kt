@@ -72,6 +72,8 @@ object Dicas {
 
             val novaDica = when {
                 cabo == null -> ctx.getString(R.string.st_sem_cabo_dica)
+                // PS2 com IP de outra rede: o UDP (broadcast) chega, mas SMB/NFS/HTTP (TCP) não; fica em destaque
+                cliente != null && !Rede.mesmaRede(cliente, cabo) -> ctx.getString(R.string.st_outra_rede, cliente, Rede.sugestaoPs2(cabo.ip), cabo.ip)
                 ultimo == 0L && agora - inicio > 3000 -> ctx.getString(R.string.st_esperando_ps2)
                 else -> null
             }

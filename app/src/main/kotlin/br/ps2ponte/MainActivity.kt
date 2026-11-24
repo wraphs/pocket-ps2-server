@@ -844,8 +844,10 @@ class MainActivity : Activity() {
     private fun ajudaSmb() = getString(R.string.ajuda_smb, ipCelular(), ipPs2(), ServidorService.PORTA_SMB)
 
     private fun mostrarConfigPs2() {
-        val partes = mutableListOf<String>()
-        if (cbSmb.isChecked && rbPasta.isChecked) partes += "— SMB1 —\n" + ajudaSmb()
+        // Rede do PS2 primeiro: IP fixo na rede do cabo (o DHCP da ancoragem some quando o cabo oscila, e com IP
+        // de outra rede só o UDP chega: SMB, NFS e HTTP ficam mudos)
+        val partes = mutableListOf("— " + getString(R.string.cfg_rede_titulo) + " —\n" + getString(R.string.cfg_rede, ipPs2(), ipCelular()))
+        if (cbSmb.isChecked && rbPasta.isChecked) partes += "— SMB1/SMB2 —\n" + ajudaSmb()
         if (cbUdpfs.isChecked) partes += "— UDPFS —\n" + getString(R.string.ajuda_udpfs, ipPs2())
         if (cbUdpbd.isChecked) partes += "— UDPBD —\n" + getString(R.string.ajuda_udpbd, ipPs2())
         if (cbNfs.isChecked && rbPasta.isChecked) partes += "— NFS —\n" + getString(R.string.ajuda_nfs, ipCelular())
