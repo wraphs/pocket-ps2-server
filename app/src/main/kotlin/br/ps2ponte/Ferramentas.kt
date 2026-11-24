@@ -6,8 +6,10 @@ import android.graphics.BitmapFactory
 import android.os.PowerManager
 import br.ps2ponte.core.ferramentas.Catalogo
 import br.ps2ponte.core.ferramentas.IdJogo
+import br.ps2ponte.core.ferramentas.OrganizadorPs1
 import br.ps2ponte.core.ferramentas.Png8
 import br.ps2ponte.core.ferramentas.Tar
+import br.ps2ponte.core.ferramentas.Verificador
 import br.ps2ponte.core.fs.Comprimido
 import br.ps2ponte.core.fs.LocalTree
 import br.ps2ponte.core.fs.VFile
@@ -99,6 +101,8 @@ object Ferramentas {
 
     const val PREF_AUTO_TAR = "auto_tar"
     const val PREF_AUTO_ZSO = "auto_zso"
+    const val PREF_AUTO_ORGANIZAR = "auto_organizar"
+    const val PREF_PS1_DESTINO = "ps1_destino"
 
     private fun arqCatalogo(ctx: Context, pasta: String) = File(ctx.filesDir, "catalogo-${Integer.toHexString(pasta.hashCode())}.txt")
 
@@ -121,8 +125,9 @@ object Ferramentas {
     }
 
     /**
-     * Rotina ao abrir o app: atualiza o catálogo e, se os interruptores estiverem ligados, compacta as ISOs
-     * novas (só com o servidor parado: o PS2 pode estar lendo) e refaz o art.tar. No máximo uma vez por minuto.
+     * Rotina ao abrir o app: atualiza o catálogo e, conforme os interruptores, organiza (as conversões de PS1
+     * ficam esperando o "sim" em [pedido]), compacta as ISOs novas (só com o servidor parado: o PS2 pode estar
+     * lendo) e refaz o art.tar. No máximo uma vez por minuto.
      */
     fun rotina(ctx: Context, pasta: String, forcar: Boolean = false) {
         val agora = System.currentTimeMillis()
@@ -133,6 +138,14 @@ object Ferramentas {
             val raiz = Fonte.raiz(ctx, pasta)
             var c = atualizarCatalogo(ctx, pasta, raiz)
             val msgs = mutableListOf<String>()
+            if (prefs.getBoolean(PREF_AUTO_ORGANIZAR, false) && !Estado.rodando && c.foraDoLugar + c.ps1.size > 0) {
+                val o = planejarOrganizacao(ctx, pasta, raiz)
+                if (!o.vazio) {
+                    if (o.plano.conversoes == 0) msgs += executarOrganizacao(ctx, o, apagarConvertidos = false)
+                    else pedido = o // a tela pergunta antes de converter
+                    c = catalogo ?: c
+                }
+            }
             if (prefs.getBoolean(PREF_AUTO_ZSO, false) && !Estado.rodando && c.isos.isNotEmpty()) {
                 msgs += ctx.getString(R.string.ft_auto_zso) + " " + compactar(ctx, jogosDe(raiz, c.isos), apagarOriginal = true)
                 c = atualizarCatalogo(ctx, pasta, raiz)
@@ -144,6 +157,9 @@ object Ferramentas {
             msgs.joinToString("\n")
         }
     }
+
+    /** Organização que precisa de confirmação (conversões de PS1), achada pela rotina automática. */
+    @Volatile var pedido: Organizacao? = null
 
     /** Depois de uma ferramenta manual: art.tar automático (se ligado) e catálogo em dia. */
     fun depois(ctx: Context, pasta: String, raiz: VFile, mexeuNaArte: Boolean): String {
@@ -193,27 +209,58 @@ object Ferramentas {
 
     // ------------------------------------------------------------------ organizar
 
+    /** O que Organizar vai fazer: PS2 fora de DVD/CD e o plano dos jogos de PS1. Nada mudou no disco ainda. */
+    class Organizacao(val pasta: String, val raiz: VFile, val ps2: List<Jogo>, val plano: OrganizadorPs1.Plano) {
+        /** Pedido pelo botão (mostra "nada a fazer"); a rotina automática fica quieta. */
+        var manual = false
+        val vazio get() = ps2.isEmpty() && plano.vazio
+
+        fun resumo(ctx: Context): String = buildString {
+            if (ps2.isNotEmpty()) append(ctx.getString(R.string.ft_org_ps2, ps2.size)).append("\n")
+            for (a in plano.acoes) append(if (a.conversao) "🔄 " else "• ").append(a.descricao).append("\n")
+            for (a in plano.avisos) append(a).append("\n")
+            if (plano.conversoes > 0) {
+                val gb = plano.acoes.filter { it.conversao }.sumOf { it.bytes } / (1024.0 * 1024 * 1024)
+                append("\n").append(ctx.getString(R.string.ft_org_conversao, plano.conversoes, gb))
+            }
+        }.trim()
+    }
+
+    fun destinoPs1(ctx: Context): OrganizadorPs1.Destino = try {
+        OrganizadorPs1.Destino.valueOf(ctx.getSharedPreferences("ps2ponte", Context.MODE_PRIVATE).getString(PREF_PS1_DESTINO, "MANTER")!!)
+    } catch (e: IllegalArgumentException) {
+        OrganizadorPs1.Destino.MANTER
+    }
+
+    fun planejarOrganizacao(ctx: Context, pasta: String, raiz: VFile): Organizacao {
+        val c = atualizarCatalogo(ctx, pasta, raiz)
+        val ps2 = jogosDe(raiz, c.jogos.filter { !it.ps1 && it.foraDoLugar })
+        return Organizacao(pasta, raiz, ps2, OrganizadorPs1(raiz).planejar(c, destinoPs1(ctx)))
+    }
+
     /**
-     * Cria as pastas do OPL e leva para DVD/ ou CD/ todos os jogos que o catálogo achou fora do lugar
-     * (na raiz, em subpastas de download, dentro de DVD/xyz/…).
+     * Cria as pastas do OPL, leva os jogos de PS2 fora do lugar para DVD/ ou CD/ e executa o plano de PS1
+     * (POPS/ e EMBER/games/, multidisco, conversões). [apagarConvertidos] só vale para as conversões.
      */
-    fun organizar(ctx: Context, pasta: String, raiz: VFile): String {
+    fun executarOrganizacao(ctx: Context, o: Organizacao, apagarConvertidos: Boolean): String {
+        val raiz = o.raiz
         for (n in PASTAS_OPL) if (pasta(raiz, n) == null) raiz.child(n).mkdirs()
         val dvd = pasta(raiz, "DVD") ?: throw IOException(ctx.getString(R.string.ft_sem_pasta, "DVD"))
         val cd = pasta(raiz, "CD") ?: throw IOException(ctx.getString(R.string.ft_sem_pasta, "CD"))
-        val soltos = jogosDe(raiz, atualizarCatalogo(ctx, pasta, raiz).jogos.filter { it.foraDoLugar })
         var movidos = 0
         val falhas = mutableListOf<String>()
-        soltos.forEachIndexed { i, j ->
+        o.ps2.forEachIndexed { i, j ->
             val f = j.arquivo
-            passo(i.toLong(), soltos.size.toLong(), f.name)
+            passo(i.toLong(), o.ps2.size.toLong(), f.name)
             val destino = (if (tamanhoReal(f) <= LIMITE_CD) cd else dvd).child(f.name)
             if (destino.exists() || !f.renameTo(destino)) falhas += f.name else movidos++
         }
-        val c = atualizarCatalogo(ctx, pasta, raiz)
-        val sb = StringBuilder(ctx.getString(R.string.ft_organizado, movidos))
+        val falhasPs1 = o.plano.executar(apagarConvertidos) { feito, total, texto -> passo(feito, total, texto) }
+        val c = atualizarCatalogo(ctx, o.pasta, raiz)
+        val sb = StringBuilder(ctx.getString(R.string.ft_organizado, movidos + o.plano.acoes.size - falhasPs1.size))
         if (falhas.isNotEmpty()) sb.append("\n").append(ctx.getString(R.string.ft_nao_movidos, falhas.joinToString()))
-        val longos = c.jogos.count { it.nome.length > 64 }
+        for (f in falhasPs1) sb.append("\n✗ ").append(f)
+        val longos = c.ps2.count { it.nome.length > 64 }
         if (longos > 0) sb.append("\n").append(ctx.getString(R.string.ft_nomes_longos, longos))
         return sb.toString()
     }
@@ -222,29 +269,52 @@ object Ferramentas {
 
     private fun arquivosArt(raiz: VFile): List<VFile> = pasta(raiz, "ART")?.listFiles()?.filter { it.isFile } ?: emptyList()
 
-    /** Baixa as capas que faltam (banco xlenore/ps2-covers) e grava como PNG 8 bits: ART/<ID>_COV.png. */
+    /**
+     * Baixa as capas que faltam (bancos xlenore/ps2-covers e psx-covers) e grava como PNG 8 bits com o nome que
+     * cada loader procura: ART/<código>_COV.png (PS2), ART/<nome do VCD>_COV.png (POPS), ART/<pasta>_COV.png (Ember).
+     */
     fun baixarCapas(ctx: Context, pasta: String, raiz: VFile, maxL: Int, maxA: Int): String {
         val art = pasta(raiz, "ART") ?: raiz.child("ART").also { it.mkdirs() }
         val existentes = arquivosArt(raiz).map { it.name.uppercase() }.toHashSet()
-        val lista = jogosDe(raiz, atualizarCatalogo(ctx, pasta, raiz).jogos)
+        val lista = atualizarCatalogo(ctx, pasta, raiz).jogos.filter { !it.foraDoLugar }
         var baixadas = 0
         var semId = 0
         val naoAchadas = mutableListOf<String>()
         lista.forEachIndexed { i, j ->
             passo(i.toLong(), lista.size.toLong(), j.nome)
-            val id = lerId(j) ?: run { semId++; return@forEachIndexed }
-            if (existentes.any { it.startsWith("${id}_COV.") }) return@forEachIndexed
-            val bytes = baixar(ctx, "https://raw.githubusercontent.com/xlenore/ps2-covers/main/covers/default/${IdJogo.serial(id)}.jpg")
+            val id = j.id ?: run { semId++; return@forEachIndexed }
+            val chave = j.chaveArte ?: return@forEachIndexed
+            if (existentes.any { it.startsWith("${chave.uppercase()}_COV.") }) return@forEachIndexed
+            val banco = if (j.ps1) "psx-covers" else "ps2-covers"
+            val bytes = baixar(ctx, "https://raw.githubusercontent.com/xlenore/$banco/main/covers/default/${IdJogo.serial(id)}.jpg")
             if (bytes == null) { naoAchadas += id; return@forEachIndexed }
             val png = paraPng8(bytes, maxL, maxA) ?: run { naoAchadas += id; return@forEachIndexed }
-            gravar(art.child("${id}_COV.png"), png)
-            existentes += "${id}_COV.PNG"
+            gravar(art.child("${chave}_COV.png"), png)
+            existentes += "${chave.uppercase()}_COV.PNG"
             baixadas++
         }
         val sb = StringBuilder(ctx.getString(R.string.ft_capas_baixadas, baixadas, lista.size))
         if (semId > 0) sb.append("\n").append(ctx.getString(R.string.ft_sem_id, semId))
         if (naoAchadas.isNotEmpty()) sb.append("\n").append(ctx.getString(R.string.ft_capas_nao_achadas, naoAchadas.joinToString()))
         return sb.toString()
+    }
+
+    /** Arquivos dos loaders (POPStarter, Ember, Neutrino, pastas do OPL). */
+    fun verificar(ctx: Context, pasta: String, raiz: VFile): String {
+        val c = atualizarCatalogo(ctx, pasta, raiz)
+        val itens = Verificador.verificar(raiz, c)
+        if (itens.isEmpty()) return ctx.getString(R.string.ft_verif_nada)
+        return itens.groupBy { it.grupo }.entries.joinToString("\n\n") { (g, l) ->
+            g + "\n" + l.joinToString("\n") { i ->
+                val s = when (i.estado) {
+                    Verificador.Estado.OK -> "✓"
+                    Verificador.Estado.FALTA -> "✗"
+                    Verificador.Estado.ERRADO -> "⚠"
+                    Verificador.Estado.OPCIONAL -> "○"
+                }
+                "$s ${i.caminho}" + if (i.nota.isNotEmpty() && i.estado != Verificador.Estado.OK) "\n     ${i.nota}" else ""
+            }
+        } + "\n\n" + ctx.getString(R.string.ft_verif_legenda)
     }
 
     /** Converte JPG/WebP/BMP/PNG da pasta ART para PNG indexado de 8 bits (o que o OPL lê sem erro). */

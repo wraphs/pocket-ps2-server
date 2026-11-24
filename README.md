@@ -20,6 +20,8 @@ No PC, no Wi-Fi bridge, no root required.
 - "Whole USB drive" mode: reads a pendrive/HDD directly over USB (block device for UDPBD/UDPFS).
 - Compressed games: `.zso` and `.cso` are served as plain `.iso`, decompressed on the fly (OPL still gets ZSO as is over SMB).
 - **Tools** tab: organize the OPL folder, list games with their code and cover status, download missing covers as 8-bit PNG, convert covers to 8-bit PNG, pack `ART/art.tar` for RiptOPL, compress ISO → ZSO (verified before deleting anything) and back.
+- **PS1 games** for POPStarter (`POPS/*.VCD`) and Ember (`EMBER/games/<game>/`): found anywhere in the folder, organized into the right place, converted CUE/BIN ⇄ VCD when you pick the other loader (byte-identical to CUE2POPS, Redump multi-bin CUEs accepted, always asks first), multi-disc set up (`DISCS.TXT` + `VMCDIR.TXT` for POPS, `Discs.txt` for Ember), PS1 covers too.
+- A checker for the files each loader needs (POPStarter, Ember, Neutrino, OPL folders).
 - A clean main screen: protocols, access mode and other knobs live under **Advanced**.
 - File access in three ways: **Normal** (Android permissions), **Root** (Magisk/KernelSU) or **Shizuku** — the last two can read folders Android hides from apps, like the root of the internal storage or `/mnt/media_rw`.
 - Live diagnosis: tells you when the cable network is missing, when the PS2 never showed up (and what to check), when the PS2 is on another network, when the hub glitched or a transfer stalled.
@@ -109,6 +111,7 @@ App Android que serve jogos para o PlayStation 2 pelo cabo de rede: **celular �
 
 - **SMB1/SMB2** (OPL, RiptOPL), **UDPFS** (NHDDL/Neutrino, o mais rápido), **UDPBD** (Neutrino/XEB+), **NFS** (Neutrino/RiptOPL) e **HTTP** (RiptOPL, por TCP).
 - Jogos `.zso`/`.cso` servidos como `.iso`, descompactados na hora.
+- Jogos de **PS1** para POPStarter (VCD) e Ember (CUE/BIN): organiza, converte entre os formatos (com aviso antes), arruma multidisco e baixa capas.
 - Aba **Ferramentas**: organizar a pasta do OPL, ver jogos e capas, baixar capas em PNG 8-bit, gerar `ART/art.tar`, compactar ISO → ZSO e descompactar.
 - Pasta do celular ou do pendrive, ou o pendrive inteiro lido direto pelo USB.
 - Acesso aos arquivos **Normal**, **Root** ou **Shizuku** (os dois últimos leem a raiz do armazenamento e o pendrive em `/mnt/media_rw`, que o Android esconde).

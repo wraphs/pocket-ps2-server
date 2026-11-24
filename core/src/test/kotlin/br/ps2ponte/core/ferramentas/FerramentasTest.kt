@@ -56,13 +56,13 @@ class FerramentasTest {
     @Test
     fun catalogoAchaJogosEReaproveita() {
         File(dir, "DVD").mkdirs()
-        File(dir, "POPS").mkdirs()
+        File(dir, "APPS").mkdirs()
         File(dir, "ART").mkdirs()
         File(dir, "Baixados/sub").mkdirs()
         File(dir, "DVD/a.iso").writeBytes(isoCom("BOOT2 = cdrom0:\\SLUS_209.46;1"))
         File(dir, "solto.iso").writeBytes(isoCom("BOOT2 = cdrom0:\\SCES_502.94;1"))
         File(dir, "Baixados/sub/b.zso").writeBytes(ByteArray(10))
-        File(dir, "POPS/ps1.iso").writeBytes(ByteArray(10)) // PS1: fora do catálogo
+        File(dir, "APPS/prog.iso").writeBytes(ByteArray(10)) // APPS: fora do catálogo
         File(dir, "ART/SLUS_209.46_COV.png").writeBytes(ByteArray(10))
         val raiz = LocalFile.root(dir)
         var lidos = 0

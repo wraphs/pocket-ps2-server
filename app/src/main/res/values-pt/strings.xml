@@ -145,11 +145,10 @@ RiptOPL com SMB2: mesma porta e mesmo compartilhamento; qualquer usuário e senh
     <string name="op_descompactar">Servir ZSO/CSO como ISO</string>
     <string name="ajuda_descompactar">Jogos .zso e .cso aparecem para o PS2 como .iso normais, descompactados na hora pelo celular.\n\nAssim o NHDDL/Neutrino (UDPFS e UDPBD) roda jogos compactados, que ocupam bem menos espaço.\n\nNo SMB o .zso continua indo como está, porque o OPL já lê ZSO sozinho e o cabo leva menos bytes. O .cso vira .iso também no SMB.\n\nSe já existir um .iso com o mesmo nome, o compactado fica escondido.</string>
     <string name="ft_sec_pasta">Pasta do OPL</string>
-    <string name="ft_ajuda_pasta">A lista de jogos é atualizada sozinha toda vez que você abre o app: procura .iso, .zso e .cso na pasta inteira (menos ART, CFG, VMC, POPS e APPS) e lê o código de cada jogo do SYSTEM.CNF. Só arquivos novos ou alterados são lidos de novo, então é rápido.\n\nVer jogos: mostra a lista, com o código, se tem capa e se está fora de DVD/ e CD/.\n\nOrganizar: cria as pastas do OPL e leva os jogos que estão fora do lugar para DVD/ (mais de 700 MB) ou CD/. Nada é apagado.</string>
+    <string name="ft_ajuda_pasta">A lista de jogos se atualiza sozinha toda vez que você abre o app: procura PS2 (.iso, .zso, .cso) e PS1 (.VCD e .cue) na pasta inteira e lê o código de cada jogo. Só arquivos novos ou alterados são lidos de novo.\n\nOrganizar: cria as pastas do OPL, leva os jogos de PS2 para DVD/ (mais de 700 MB) ou CD/ e os de PS1 para POPS/ ou EMBER/games/, arrumando o multidisco. Mostra tudo antes de fazer.</string>
     <string name="ft_sem_pasta_escolhida">Escolha a pasta dos jogos na aba Servidor.</string>
     <string name="ft_btn_ver">Ver jogos</string>
     <string name="ft_btn_organizar">Organizar a pasta</string>
-    <string name="ft_conf_organizar">Criar as pastas do OPL e mover os jogos soltos para DVD/ e CD/?</string>
     <string name="ft_sec_capas">Capas</string>
     <string name="ft_ajuda_capas">Baixar: procura a capa de cada jogo sem capa pelo código (banco xlenore/ps2-covers, precisa de internet no celular) e grava em ART/&lt;código>_COV.png.\n\nConverter: transforma JPG/WebP/BMP/PNG da pasta ART em PNG de 8 bits (256 cores), o formato que o OPL e o RiptOPL leem sem erro e que carrega mais rápido.\n\nTamanho: 140×200 é o padrão do OPL; 280×400 é o padrão do RiptOPL.</string>
     <string name="ft_capa_opl">140×200 (OPL)</string>
@@ -197,7 +196,7 @@ RiptOPL com SMB2: mesma porta e mesmo compartilhamento; qualquer usuário e senh
     <string name="srv_nfs">NFS · Neutrino, RiptOPL (TCP 2049)</string>
     <string name="ajuda_nfs">Neutrino (driver nfs:) e RiptOPL › NFS:\n• Servidor: %1$s\n• Porta: 2049\n• Export: / (ou /ps2)\n\nUsa TCP, como o HTTP: aguenta melhor hub barato. O Neutrino só lê DVD por NFS; o RiptOPL também grava VMC (o arquivo precisa já existir).</string>
     <string name="ft_btn_atualizar">Atualizar a lista agora</string>
-    <string name="ft_resumo">%1$d jogo(s) · %2$d sem capa · %3$d ISO sem compactar</string>
+    <string name="ft_resumo">%1$d jogo(s) de PS2 · %2$d de PS1 · %3$d sem capa · %4$d ISO sem compactar</string>
     <string name="ft_resumo_vazio">Lista de jogos ainda não montada.</string>
     <string name="ft_resumo_fora">📁 %1$d fora de DVD/ e CD/ (o PS2 não vê): use Organizar.</string>
     <string name="ft_resumo_tar">ART/art.tar desatualizado.</string>
@@ -208,4 +207,20 @@ RiptOPL com SMB2: mesma porta e mesmo compartilhamento; qualquer usuário e senh
     <string name="ft_atualizando">Atualizando a lista de jogos</string>
     <string name="ft_auto_zso">Compactação automática:</string>
     <string name="ft_auto_tar">art.tar automático:</string>
+    <string name="ft_btn_verificar">Verificar arquivos dos loaders</string>
+    <string name="ft_ajuda_verificar">Confere se estão na pasta os arquivos que cada loader precisa:\n• POPStarter (PS1): POPS.ELF, IOPRP252.IMG, POPS_IOX.PAK, POPSTARTER.ELF\n• Ember (PS1): ember.elf e a BIOS bios.bin de 512 KiB\n• Neutrino: módulos e configuração (quando usa NHDDL pela rede)\n• OPL: pastas DVD, CD, ART, CFG, VMC\n\nOlha presença, tamanho e se o ELF é válido. Os arquivos da Sony (POPS e BIOS) não vêm com o app: use os seus.</string>
+    <string name="ft_verif_nada">Nada para conferir ainda (sem POPS/, EMBER/ ou NEUTRINO/).</string>
+    <string name="ft_verif_legenda">✓ ok   ✗ falta   ⚠ arquivo errado   ○ opcional</string>
+    <string name="ft_ps1_destino">Jogos de PS1 vão para:</string>
+    <string name="ft_ps1_manter">O loader do formato (VCD → POPS, CUE/BIN → Ember)</string>
+    <string name="ft_ps1_pops">POPStarter (converte CUE/BIN em VCD)</string>
+    <string name="ft_ps1_ember">Ember (converte VCD em CUE/BIN)</string>
+    <string name="ft_ajuda_ps1">POPStarter: POPS/&lt;jogo>.VCD. Multidisco ganha POPS/&lt;disco>/DISCS.TXT (troca de disco com Select+L2+R2) e VMCDIR.TXT (todos os discos salvam no cartão do disco 1). Troca entre no máximo 4 discos.\n\nEmber: EMBER/games/&lt;jogo>/ com o .cue, as .bin e o .sbi do LibCrypt. Multidisco fica numa pasta só, com Discs.txt (troca pelo menu do Ember, mesmo cartão).\n\nA conversão CUE/BIN → VCD gera o mesmo arquivo que o CUE2POPS e aceita CUE com várias .bin (Redump). Sempre aparece um aviso antes de converter.</string>
+    <string name="ft_sw_auto_organizar">Organizar sozinho ao abrir o app (pergunta antes de converter)</string>
+    <string name="ft_planejando">Vendo o que organizar</string>
+    <string name="ft_nada_organizar">Tudo já está no lugar.</string>
+    <string name="ft_converter_manter">Converter e manter originais</string>
+    <string name="ft_converter_apagar">Converter e apagar originais</string>
+    <string name="ft_org_ps2">• %1$d jogo(s) de PS2 → DVD/ ou CD/</string>
+    <string name="ft_org_conversao">🔄 %1$d conversão(ões), %2$.1f GB para processar. Pode levar alguns minutos.</string>
 </resources>

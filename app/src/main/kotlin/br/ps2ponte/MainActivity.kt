@@ -37,6 +37,8 @@ import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import br.ps2ponte.core.ferramentas.Catalogo
+import br.ps2ponte.core.ferramentas.OrganizadorPs1
 import br.ps2ponte.priv.Privilegio
 import br.ps2ponte.usb.UsbMassStorage
 import rikka.shizuku.Shizuku
@@ -455,11 +457,29 @@ class MainActivity : Activity() {
         botoesFt += botao(getString(R.string.ft_btn_atualizar)) {
             tarefa(getString(R.string.ft_btn_atualizar)) { _, _ -> "" }
         }.also { cPasta.addView(it) }
-        botoesFt += botao(getString(R.string.ft_btn_organizar)) {
-            confirmar(getString(R.string.ft_btn_organizar), getString(R.string.ft_conf_organizar)) {
-                tarefa(getString(R.string.ft_btn_organizar)) { pasta, r -> Ferramentas.organizar(this, pasta, r) }
-            }
-        }.also { cPasta.addView(it) }
+        botoesFt += botao(getString(R.string.ft_btn_organizar)) { planejarOrganizacao() }.also { cPasta.addView(it) }
+        botoesFt += botao(getString(R.string.ft_btn_verificar)) { verificarArquivos() }
+            .also { cPasta.addView(linha(it, info(getString(R.string.ft_btn_verificar)) { getString(R.string.ft_ajuda_verificar) })) }
+
+        // PS1: para qual loader vão os jogos (e se converte)
+        cPasta.addView(texto(getString(R.string.ft_ps1_destino), 14f).apply { setPadding(0, dp(8), 0, 0) })
+        val grupoPs1 = RadioGroup(this).apply { orientation = RadioGroup.VERTICAL }
+        val opcoesPs1 = listOf(
+            OrganizadorPs1.Destino.MANTER to getString(R.string.ft_ps1_manter),
+            OrganizadorPs1.Destino.POPS to getString(R.string.ft_ps1_pops),
+            OrganizadorPs1.Destino.EMBER to getString(R.string.ft_ps1_ember),
+        )
+        val atualPs1 = Ferramentas.destinoPs1(this)
+        for ((d, rotulo) in opcoesPs1) {
+            val rb = RadioButton(this).apply { text = rotulo; id = View.generateViewId(); tag = d.name }
+            grupoPs1.addView(rb)
+            if (d == atualPs1) rb.isChecked = true
+        }
+        grupoPs1.setOnCheckedChangeListener { g, id ->
+            g.findViewById<RadioButton>(id)?.tag?.let { prefs.edit().putString(Ferramentas.PREF_PS1_DESTINO, it as String).apply() }
+        }
+        cPasta.addView(linha(grupoPs1, info(getString(R.string.ft_ps1_destino)) { getString(R.string.ft_ajuda_ps1) }))
+        cPasta.addView(interruptor(Ferramentas.PREF_AUTO_ORGANIZAR, getString(R.string.ft_sw_auto_organizar)))
 
         val cCapas = cartao(raiz)
         cCapas.addView(titulo(getString(R.string.ft_sec_capas), getString(R.string.ft_sec_capas)) { getString(R.string.ft_ajuda_capas) })
@@ -515,7 +535,7 @@ class MainActivity : Activity() {
             !usavel -> ""
             c == null -> getString(R.string.ft_resumo_vazio)
             else -> buildString {
-                append(getString(R.string.ft_resumo, c.jogos.size, c.semCapa, c.isos.size))
+                append(getString(R.string.ft_resumo, c.ps2.size, c.ps1.size, c.semCapa, c.isos.size))
                 if (c.foraDoLugar > 0) append("\n").append(getString(R.string.ft_resumo_fora, c.foraDoLugar))
                 if (c.tarDesatualizado && c.tarData > 0) append("\n").append(getString(R.string.ft_resumo_tar))
             }
@@ -552,6 +572,58 @@ class MainActivity : Activity() {
         }
     }
 
+    private var mostrandoPedido = false
+
+    /** Monta o plano de Organizar numa tarefa; o resultado volta por [Ferramentas.pedido] e vira um diálogo. */
+    private fun planejarOrganizacao() {
+        val pasta = pastaSalva() ?: return aviso(getString(R.string.av_escolha_pasta))
+        Ferramentas.rodar(this, getString(R.string.ft_planejando), silencioso = true) {
+            val o = Ferramentas.planejarOrganizacao(this, pasta, Fonte.raiz(this, pasta))
+            o.manual = true
+            Ferramentas.pedido = o
+            ""
+        }
+    }
+
+    /** Mostra o que Organizar vai fazer; conversões de PS1 pedem para escolher se apaga os originais. */
+    private fun mostrarOrganizacao(o: Ferramentas.Organizacao) {
+        Ferramentas.pedido = null
+        if (isFinishing) return
+        if (o.vazio) {
+            if (o.manual) aviso(getString(R.string.ft_nada_organizar))
+            return
+        }
+        mostrandoPedido = true
+        val titulo = getString(R.string.ft_btn_organizar)
+        val fazer = { apagar: Boolean ->
+            Ferramentas.rodar(this, titulo) { Ferramentas.executarOrganizacao(this, o, apagar) }
+        }
+        val b = AlertDialog.Builder(this).setTitle(titulo).setMessage(o.resumo(this))
+            .setOnDismissListener { mostrandoPedido = false }
+            .setNegativeButton(R.string.cancelar, null)
+        if (o.plano.conversoes > 0) {
+            b.setPositiveButton(R.string.ft_converter_manter) { _, _ -> fazer(false) }
+            b.setNeutralButton(R.string.ft_converter_apagar) { _, _ -> fazer(true) }
+        } else {
+            b.setPositiveButton(R.string.ok) { _, _ -> fazer(false) }
+        }
+        b.show()
+    }
+
+    /** Confere os arquivos dos loaders (POPStarter, Ember, Neutrino) e mostra a lista. */
+    private fun verificarArquivos() {
+        val pasta = pastaSalva() ?: return
+        aviso(getString(R.string.ft_lendo))
+        fundo.execute {
+            val texto = try {
+                Ferramentas.verificar(this, pasta, Fonte.raiz(this, pasta))
+            } catch (e: Exception) {
+                getString(R.string.pasta_erro, e.message ?: e.javaClass.simpleName)
+            }
+            runOnUiThread { if (!isFinishing) dialogo(getString(R.string.ft_btn_verificar), texto) }
+        }
+    }
+
     /** Lista do catálogo (sem abrir nada: é instantâneo). */
     private fun verJogos() {
         val c = Ferramentas.catalogo
@@ -567,7 +639,12 @@ class MainActivity : Activity() {
                 c.temCapa(j) -> "🖼"
                 else -> "▫"
             }
-            "$marca ${j.rel}\n     ${j.id ?: getString(R.string.ft_sem_codigo)} · ${j.tamanho / (1024 * 1024)} MiB"
+            val tipo = when (j.tipo) {
+                Catalogo.Tipo.PS2 -> ""
+                Catalogo.Tipo.VCD -> "PS1 · POPS · "
+                Catalogo.Tipo.CUE -> "PS1 · Ember · "
+            }
+            "$marca ${j.rel}\n     $tipo${j.id ?: getString(R.string.ft_sem_codigo)} · ${j.tamanho / (1024 * 1024)} MiB"
         } + "\n\n" + getString(R.string.ft_legenda)
         dialogo(getString(R.string.ft_btn_ver), texto)
     }
@@ -575,7 +652,7 @@ class MainActivity : Activity() {
     /** Escolhe quais jogos compactar (ISO) ou descompactar (ZSO/CSO), e se apaga os originais. */
     private fun escolherJogos(compactar: Boolean) {
         val c = Ferramentas.catalogo ?: return verJogos()
-        val lista = c.jogos.filter { it.compactado != compactar }
+        val lista = c.jogos.filter { !it.ps1 && it.compactado != compactar }
         if (lista.isEmpty()) return aviso(getString(if (compactar) R.string.ft_nada_compactar else R.string.ft_nada_descompactar))
         val marcados = BooleanArray(lista.size)
         val nomes = lista.map { "${it.rel}  (${it.tamanho / (1024 * 1024)} MiB)" }.toTypedArray()
@@ -824,6 +901,8 @@ class MainActivity : Activity() {
         for (i in 0 until grupoAcesso.childCount) grupoAcesso.getChildAt(i).isEnabled = livre
         cbDescompactar.isEnabled = livre
         if (abaFerramentas.visibility == View.VISIBLE) atualizarFerramentas()
+        // A rotina automática achou conversões de PS1: pergunta antes (em qualquer aba)
+        Ferramentas.pedido?.let { if (!Ferramentas.ocupado && !mostrandoPedido) mostrarOrganizacao(it) }
     }
 
     private fun medirVelocidade() {
