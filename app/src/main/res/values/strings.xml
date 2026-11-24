@@ -195,4 +195,6 @@ RiptOPL with SMB2: same port and share; any user and password. The app answers S
     <string name="ajuda_http">RiptOPL › Network Settings:\n• Protocol: HTTP\n• Address: %1$s\n• Port: 1100 (always fill it in: with 0 the loader uses different ports for the list and for the game)\n• Base path: / (or blank)\n\nUses TCP: no lost packets on cheap hubs, unlike UDP. Read-only: no VMC over HTTP. Dual-layer DVD9 may not work because of a loader limit.</string>
     <string name="op_http_antigo">List for the older OPL-HTTP</string>
     <string name="ajuda_http_antigo">RiptOPL and Docmine17\'s OPL-HTTP read games.csv in different formats, and the server cannot tell which one is on the other end.\n\nLeave it off for RiptOPL. Turn it on only for Docmine17\'s OPL-HTTP: the list then uses the simple format (up to ~200 games, no commas in names) and ZSO goes compressed.</string>
+    <string name="srv_nfs">NFS · Neutrino, RiptOPL (TCP 2049)</string>
+    <string name="ajuda_nfs">Neutrino (nfs: driver) and RiptOPL › NFS:\n• Server: %1$s\n• Port: 2049\n• Export: / (or /ps2)\n\nUses TCP, like HTTP: sturdier on cheap hubs. Neutrino only reads DVDs over NFS; RiptOPL also writes VMCs (the file must already exist).</string>
 </resources>

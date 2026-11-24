@@ -78,6 +78,7 @@ class MainActivity : Activity() {
     private lateinit var tvLog: TextView
     private lateinit var cbDescompactar: CheckBox
     private lateinit var cbHttp: CheckBox
+    private lateinit var cbNfs: CheckBox
     private lateinit var cbHttpAntigo: CheckBox
     private lateinit var btnTrocarPasta: Button
     private lateinit var painelEscolha: LinearLayout
@@ -394,6 +395,7 @@ class MainActivity : Activity() {
         cbSmb = caixaServidor(cAvancado, "smb", getString(R.string.srv_smb)) { ajudaSmb() }
         cbUdpfs = caixaServidor(cAvancado, "udpfs", getString(R.string.srv_udpfs)) { getString(R.string.ajuda_udpfs, ipPs2()) }
         cbUdpbd = caixaServidor(cAvancado, "udpbd", getString(R.string.srv_udpbd)) { getString(R.string.ajuda_udpbd, ipPs2()) }
+        cbNfs = caixaServidor(cAvancado, "nfs", getString(R.string.srv_nfs)) { getString(R.string.ajuda_nfs, ipCelular()) }
         cbHttp = caixaServidor(cAvancado, "http", getString(R.string.srv_http)) { getString(R.string.ajuda_http, ipCelular()) }
         cbHttpAntigo = CheckBox(this).apply {
             text = getString(R.string.op_http_antigo)
@@ -594,7 +596,8 @@ class MainActivity : Activity() {
         if (cbSmb.isChecked && rbPasta.isChecked) partes += "— SMB1 —\n" + ajudaSmb()
         if (cbUdpfs.isChecked) partes += "— UDPFS —\n" + getString(R.string.ajuda_udpfs, ipPs2())
         if (cbUdpbd.isChecked) partes += "— UDPBD —\n" + getString(R.string.ajuda_udpbd, ipPs2())
-        if (cbHttp.isChecked && rbPasta.isChecked) partes += "— HTTP —\n" + getString(R.string.ajuda_http, ipCelular())
+        if (cbNfs.isChecked && rbPasta.isChecked) partes += "— NFS —\n" + getString(R.string.ajuda_nfs, ipCelular())
+        if (cbHttp.isChecked && rbPasta.isChecked) partes +="— HTTP —\n" + getString(R.string.ajuda_http, ipCelular())
         dialogo(getString(R.string.config_ps2_titulo), partes.joinToString("\n\n").ifEmpty { getString(R.string.av_marque_servidor) })
     }
 
@@ -747,6 +750,7 @@ class MainActivity : Activity() {
         // No modo bloco não há pasta para o SMB
         cbSmb.isEnabled = pasta
         cbHttp.isEnabled = pasta
+        cbNfs.isEnabled = pasta
         atualizarPermissoes()
     }
 
@@ -780,6 +784,7 @@ class MainActivity : Activity() {
         for (cb in listOf(cbUdpfs, cbUdpbd)) cb.isEnabled = livre
         cbSmb.isEnabled = livre && rbPasta.isChecked
         cbHttp.isEnabled = livre && rbPasta.isChecked
+        cbNfs.isEnabled = livre && rbPasta.isChecked
         cbHttpAntigo.isEnabled = livre && rbPasta.isChecked
         rbPasta.isEnabled = livre
         rbUsb.isEnabled = livre
@@ -806,6 +811,7 @@ class MainActivity : Activity() {
         if (cbUdpfs.isChecked) add(ServidorService.SRV_UDPFS)
         if (cbUdpbd.isChecked) add(ServidorService.SRV_UDPBD)
         if (cbHttp.isChecked && rbPasta.isChecked) add(ServidorService.SRV_HTTP)
+        if (cbNfs.isChecked && rbPasta.isChecked) add(ServidorService.SRV_NFS)
     }
 
     private fun iniciarOuParar() {

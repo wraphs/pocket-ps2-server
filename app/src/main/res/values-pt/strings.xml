@@ -194,4 +194,6 @@ RiptOPL com SMB2: mesma porta e mesmo compartilhamento; qualquer usuário e senh
     <string name="ajuda_http">RiptOPL › Network Settings:\n• Protocol: HTTP\n• Address: %1$s\n• Port: 1100 (preencha sempre: com 0 o loader usa portas diferentes para a lista e para o jogo)\n• Base path: / (ou vazio)\n\nUsa TCP: não perde pacote em hub barato, ao contrário do UDP. Só leitura: sem VMC pelo HTTP. DVD de duas camadas (DVD9) pode não funcionar por limite do loader.</string>
     <string name="op_http_antigo">Lista para o OPL-HTTP antigo</string>
     <string name="ajuda_http_antigo">O RiptOPL e o OPL-HTTP do Docmine17 leem o games.csv em formatos diferentes, e o servidor não tem como saber qual está do outro lado.\n\nDeixe desmarcado para o RiptOPL. Marque só se usa o OPL-HTTP do Docmine17: aí a lista fica no formato simples (até ~200 jogos, sem vírgula no nome) e o ZSO vai compactado.</string>
+    <string name="srv_nfs">NFS · Neutrino, RiptOPL (TCP 2049)</string>
+    <string name="ajuda_nfs">Neutrino (driver nfs:) e RiptOPL › NFS:\n• Servidor: %1$s\n• Porta: 2049\n• Export: / (ou /ps2)\n\nUsa TCP, como o HTTP: aguenta melhor hub barato. O Neutrino só lê DVD por NFS; o RiptOPL também grava VMC (o arquivo precisa já existir).</string>
 </resources>

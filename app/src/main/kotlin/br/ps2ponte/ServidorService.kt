@@ -25,6 +25,7 @@ import br.ps2ponte.core.exfat.VirtualExFat
 import br.ps2ponte.core.fs.ArvoreIso
 import br.ps2ponte.core.fs.LocalTree
 import br.ps2ponte.core.http.HttpServer
+import br.ps2ponte.core.nfs.NfsServer
 import br.ps2ponte.core.smb.SmbServer
 import br.ps2ponte.core.udpbd.UdpbdServer
 import br.ps2ponte.core.udpfs.UdpfsServer
@@ -123,6 +124,7 @@ class ServidorService : Service() {
                 val raizSmb = if (descompactar) ArvoreIso(raiz, zso = false) else raiz
                 val tree = LocalTree(raizIso)
                 if (SRV_SMB in srv) novos += SmbServer(LocalTree(raizSmb), port = PORTA_SMB, shareName = "PS2SMB", log = log, stats = stats)
+                if (SRV_NFS in srv) novos += NfsServer(LocalTree(raizIso), port = NfsServer.PORT, log = log, stats = stats)
                 if (SRV_HTTP in srv) {
                     // O RiptOPL não abre ZSO pelo HTTP (vai descompactado); o OPL-HTTP antigo lê ZSO sozinho
                     val ript = prefs.getBoolean(PREF_HTTP_RIPTOPL, true)
@@ -203,6 +205,7 @@ class ServidorService : Service() {
     private fun descricao(s: PonteServer) = when (s) {
         is SmbServer -> "SMB1/2 (TCP $PORTA_SMB)"
         is HttpServer -> "HTTP (TCP ${HttpServer.PORT})"
+        is NfsServer -> "NFS (TCP ${NfsServer.PORT})"
         is UdpfsServer -> "UDPFS (UDP ${UdpfsServer.PORT})"
         is UdpbdServer -> "UDPBD (UDP ${UdpbdServer.PORT})"
         else -> s.name
@@ -298,6 +301,7 @@ class ServidorService : Service() {
         const val SRV_UDPFS = "udpfs"
         const val SRV_UDPBD = "udpbd"
         const val SRV_HTTP = "http"
+        const val SRV_NFS = "nfs"
         const val PORTA_SMB = 1445
         const val PREF_DESCOMPACTAR = "descompactar"
         const val PREF_HTTP_RIPTOPL = "http_riptopl"

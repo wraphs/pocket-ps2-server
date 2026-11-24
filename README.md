@@ -8,9 +8,10 @@ No PC, no Wi-Fi bridge, no root required.
 
 | Protocol | Port | For |
 |---|---|---|
-| **SMB1** | TCP 1445 | Open PS2 Loader (any version, 0.9 → 1.2 beta), RiptOPL |
+| **SMB1 / SMB2** | TCP 1445 | Open PS2 Loader (any version, 0.9 → 1.2 beta); RiptOPL and Neutrino with SMB2 (2.0.2/2.1) on the same port |
 | **UDPFS** | UDP 62966 | NHDDL + Neutrino, RiptOPL — serves the folder directly; the fastest |
 | **UDPBD** | UDP 48573 | Neutrino, XEB+, RiptOPL — a virtual exFAT disk built from the folder, or a whole USB drive read directly |
+| **NFS v4.0** | TCP 2049 | Neutrino's `nfs:` driver and RiptOPL (export `/`) |
 | **HTTP** | TCP 1100 | RiptOPL (and Docmine17's OPL-HTTP) — `games.csv` + Range streaming over TCP, sturdy on cheap hubs |
 
 ## Features
@@ -106,7 +107,7 @@ Protocol references: Neutrino (`iop/udpbd`, `iop/udpfs`, `pc/udpfs_server.py`), 
 
 App Android que serve jogos para o PlayStation 2 pelo cabo de rede: **celular → hub/adaptador USB-C com porta de rede → cabo → PS2**. Sem PC, sem root.
 
-- **SMB1** (OPL), **UDPFS** (NHDDL/Neutrino, o mais rápido), **UDPBD** (Neutrino/XEB+) e **HTTP** (RiptOPL, por TCP).
+- **SMB1/SMB2** (OPL, RiptOPL), **UDPFS** (NHDDL/Neutrino, o mais rápido), **UDPBD** (Neutrino/XEB+), **NFS** (Neutrino/RiptOPL) e **HTTP** (RiptOPL, por TCP).
 - Jogos `.zso`/`.cso` servidos como `.iso`, descompactados na hora.
 - Aba **Ferramentas**: organizar a pasta do OPL, ver jogos e capas, baixar capas em PNG 8-bit, gerar `ART/art.tar`, compactar ISO → ZSO e descompactar.
 - Pasta do celular ou do pendrive, ou o pendrive inteiro lido direto pelo USB.
