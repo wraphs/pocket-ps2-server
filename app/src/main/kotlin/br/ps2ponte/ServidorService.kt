@@ -22,6 +22,7 @@ import br.ps2ponte.core.block.BlockDevice
 import br.ps2ponte.core.block.Particoes
 import br.ps2ponte.core.block.Sector512Adapter
 import br.ps2ponte.core.exfat.VirtualExFat
+import br.ps2ponte.core.fs.ArvoreIso
 import br.ps2ponte.core.fs.LocalTree
 import br.ps2ponte.core.smb.SmbServer
 import br.ps2ponte.core.udpbd.UdpbdServer
@@ -112,14 +113,19 @@ class ServidorService : Service() {
                 val nome = Fonte.descricao(this, pasta)
                 val raiz = Fonte.raiz(this, pasta)
                 if (!raiz.isDirectory) throw IllegalStateException(getString(R.string.err_pasta_sumiu, nome))
-                val tree = LocalTree(raiz)
                 Estado.log(getString(R.string.log_pasta, nome))
-                if (SRV_SMB in srv) novos += SmbServer(tree, port = PORTA_SMB, shareName = "PS2SMB", log = log, stats = stats)
+                // Jogos .zso/.cso aparecem como .iso, descompactados na hora. No SMB o ZSO vai como está:
+                // o OPL lê ZSO sozinho (e o cabo leva menos bytes)
+                val descompactar = getSharedPreferences("ps2ponte", MODE_PRIVATE).getBoolean(PREF_DESCOMPACTAR, true)
+                val raizIso = if (descompactar) ArvoreIso(raiz, zso = true) else raiz
+                val raizSmb = if (descompactar) ArvoreIso(raiz, zso = false) else raiz
+                val tree = LocalTree(raizIso)
+                if (SRV_SMB in srv) novos += SmbServer(LocalTree(raizSmb), port = PORTA_SMB, shareName = "PS2SMB", log = log, stats = stats)
                 // O disco virtual atende o UDPBD e o modo bloco do UDPFS
                 var exfat: VirtualExFat? = null
                 if (SRV_UDPBD in srv || SRV_UDPFS in srv) {
                     Estado.log(getString(R.string.log_montando))
-                    val d = VirtualExFat.build(raiz, log)
+                    val d = VirtualExFat.build(raizIso, log)
                     if (!guardar(minha, d) { dispositivo = d }) return
                     exfat = d
                 }
@@ -283,6 +289,7 @@ class ServidorService : Service() {
         const val SRV_UDPFS = "udpfs"
         const val SRV_UDPBD = "udpbd"
         const val PORTA_SMB = 1445
+        const val PREF_DESCOMPACTAR = "descompactar"
         private const val CANAL = "servidor"
 
         fun iniciar(ctx: Context, modo: String, pasta: String?, usb: String?, servidores: Set<String>) {

@@ -135,4 +135,76 @@
     <string name="dica_sem_ps2">⚠ No sign of the PS2 after %1$d s. Check:\n  • the PS2 IP is in the same network as the phone (e.g. %3$s, mask 255.255.255.0) or uses DHCP;\n  • the server address on the PS2 is %2$s;\n  • the green/orange LED of the network port lights up on the hub;\n  • the loader uses the right protocol (OPL → SMB, NHDDL/Neutrino → UDPFS/UDPBD).</string>
     <string name="dica_outra_rede">⚠ The PS2 (%1$s) is not on the cable network (%2$s). Its IP should look like %3$s; replies may go out through Wi-Fi.</string>
     <string name="dica_bateria">⚠ Android may pause the server with the screen off. Tap \"Let it run in the background\".</string>
+    <string name="aba_servidor">▶ Server</string>
+    <string name="aba_ferramentas">🧰 Tools</string>
+    <string name="sec_avancado">⚙ Advanced</string>
+    <string name="av_modo">Where the games come from:</string>
+    <string name="btn_trocar_pasta">Change folder…</string>
+    <string name="btn_fechar_escolha">Close</string>
+    <string name="op_descompactar">Serve ZSO/CSO as ISO</string>
+    <string name="ajuda_descompactar">Games in .zso and .cso show up to the PS2 as plain .iso, decompressed on the fly by the phone.
+
+This lets NHDDL/Neutrino (UDPFS and UDPBD) run compressed games, which take much less space.
+
+Over SMB the .zso goes as is, since OPL reads ZSO by itself and the cable carries fewer bytes. The .cso becomes .iso over SMB too.
+
+If an .iso with the same name exists, the compressed one is hidden.</string>
+    <string name="ft_sec_pasta">OPL folder</string>
+    <string name="ft_ajuda_pasta">Show games: lists what is in DVD/ and CD/, with each game code (read from SYSTEM.CNF) and whether it has a cover.
+
+Organize: creates the OPL folders (DVD, CD, ART, CFG, VMC…) and moves loose games from the root, or from other subfolders, into DVD/ (over 700 MB) or CD/. Nothing is deleted.</string>
+    <string name="ft_sem_pasta_escolhida">Choose the games folder on the Server tab.</string>
+    <string name="ft_btn_ver">Show games</string>
+    <string name="ft_btn_organizar">Organize the folder</string>
+    <string name="ft_conf_organizar">Create the OPL folders and move loose games into DVD/ and CD/?</string>
+    <string name="ft_sec_capas">Covers</string>
+    <string name="ft_ajuda_capas">Download: looks up the cover of each game without one by its code (xlenore/ps2-covers database, needs internet on the phone) and saves it as ART/&lt;code>_COV.png.
+
+Convert: turns JPG/WebP/BMP/PNG in the ART folder into 8-bit PNG (256 colors), the format OPL and RiptOPL read without errors and load faster.
+
+Size: 140×200 is the OPL standard; 280×400 is the RiptOPL standard.</string>
+    <string name="ft_capa_opl">140×200 (OPL)</string>
+    <string name="ft_capa_ript">280×400 (RiptOPL)</string>
+    <string name="ft_btn_baixar_capas">Download missing covers</string>
+    <string name="ft_btn_corrigir">Convert covers to 8-bit PNG</string>
+    <string name="ft_btn_tar">Pack ART/art.tar</string>
+    <string name="ft_ajuda_tar">Packs every PNG in the ART folder into one file, ART/art.tar (uncompressed). RiptOPL reads covers from it much faster than from hundreds of loose files (turn it on in Interface › Artwork Settings). The loose files stay, for regular OPL.
+
+Redo it after downloading new covers.</string>
+    <string name="ft_sec_compactar">Compress games</string>
+    <string name="ft_ajuda_compactar">Compress: ISO → ZSO (LZ4), which takes less space. OPL reads ZSO directly; for NHDDL/Neutrino the app decompresses on the fly (\"Serve ZSO/CSO as ISO\" in Advanced). Before anything is deleted, the new ZSO is checked against the ISO.
+
+Decompress: ZSO/CSO → ISO.
+
+It may take a few minutes per game on a slower phone; you can use other apps meanwhile.</string>
+    <string name="ft_btn_compactar">Compress ISO → ZSO…</string>
+    <string name="ft_btn_descompactar">Decompress ZSO/CSO → ISO…</string>
+    <string name="ft_conf_compactar">Compress %1$d game(s). Once checked, delete the original ISO to free space?</string>
+    <string name="ft_conf_descompactar">Decompress %1$d game(s). Afterwards, delete the compressed file?</string>
+    <string name="ft_manter">Keep originals</string>
+    <string name="ft_apagar">Delete originals</string>
+    <string name="ft_nada_compactar">No ISO in DVD/ or CD/.</string>
+    <string name="ft_nada_descompactar">No ZSO/CSO in DVD/ or CD/.</string>
+    <string name="ft_lendo">Reading the games…</string>
+    <string name="ft_nenhum_jogo">No games in DVD/ or CD/.</string>
+    <string name="ft_sem_codigo">no code</string>
+    <string name="ft_legenda">🖼 = has cover   ▫ = no cover</string>
+    <string name="ft_cancelado">%1$s: cancelled.</string>
+    <string name="ft_erro">%1$s: error — %2$s</string>
+    <string name="ft_sem_pasta">folder %1$s not found</string>
+    <string name="ft_organizado">Folder organized: %1$d game(s) moved.</string>
+    <string name="ft_nao_movidos">Not moved (already in the destination or Android refused): %1$s</string>
+    <string name="ft_nomes_longos">⚠ %1$d game(s) with names over 64 characters: some loaders cut or hide them.</string>
+    <string name="ft_capas_baixadas">Covers: %1$d downloaded (of %2$d games).</string>
+    <string name="ft_sem_id">%1$d game(s) without a readable code (CD image as .bin, unusual image).</string>
+    <string name="ft_capas_nao_achadas">No cover in the database: %1$s</string>
+    <string name="ft_sem_internet">no internet on the phone (the PS2 cable has none; use Wi-Fi or mobile data)</string>
+    <string name="ft_capas_corrigidas">Covers: %1$d converted to 8-bit PNG (of %2$d images).</string>
+    <string name="ft_capas_falharam">Could not read: %1$s</string>
+    <string name="ft_art_vazia">No PNG in the ART folder.</string>
+    <string name="ft_art_ok">ART/art.tar created: %1$d images, %2$.1f MiB.</string>
+    <string name="ft_nao_substituiu">could not write %1$s</string>
+    <string name="ft_sem_espaco">not enough free space for %1$s</string>
+    <string name="ft_compactados">%1$d game(s) compressed; %2$.0f MiB saved.</string>
+    <string name="ft_descompactados">%1$d game(s) decompressed.</string>
 </resources>

@@ -76,6 +76,21 @@ class MainActivity : Activity() {
     private lateinit var cbUdpfs: CheckBox
     private lateinit var cbUdpbd: CheckBox
     private lateinit var tvLog: TextView
+    private lateinit var cbDescompactar: CheckBox
+    private lateinit var btnTrocarPasta: Button
+    private lateinit var painelEscolha: LinearLayout
+    private var escolhaAberta = false
+
+    private lateinit var abaServidor: View
+    private lateinit var abaFerramentas: View
+    private lateinit var btnAbaServidor: Button
+    private lateinit var btnAbaFerramentas: Button
+    private lateinit var cartaoTarefa: LinearLayout
+    private lateinit var tvTarefa: TextView
+    private lateinit var barraTarefa: android.widget.ProgressBar
+    private lateinit var tvTarefaDetalhe: TextView
+    private lateinit var tvFtPasta: TextView
+    private val botoesFt = mutableListOf<Button>()
 
     private val handler = Handler(Looper.getMainLooper())
     private var ultimoBytes = 0L
@@ -230,7 +245,39 @@ class MainActivity : Activity() {
         return if (ajuda != null) linha(tv, info(ajudaTitulo ?: t, ajuda)) else tv
     }
 
+    /** Abas "Servidor" e "Ferramentas" no topo; cada uma rola sozinha. */
     private fun montarTela(): View {
+        val tela = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val barra = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(14), dp(6), dp(14), 0)
+        }
+        abaServidor = ScrollView(this).apply { addView(montarServidor()) }
+        abaFerramentas = ScrollView(this).apply { addView(montarFerramentas()) }
+        btnAbaServidor = botao(getString(R.string.aba_servidor)) { mostrarAba(false) }
+        btnAbaFerramentas = botao(getString(R.string.aba_ferramentas)) { mostrarAba(true) }
+        for (b in listOf(btnAbaServidor, btnAbaFerramentas)) barra.addView(b, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        tela.addView(barra)
+        val corpo = android.widget.FrameLayout(this)
+        corpo.addView(abaServidor)
+        corpo.addView(abaFerramentas)
+        tela.addView(corpo, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        mostrarAba(prefs.getBoolean("aba_ferramentas", false))
+        return tela
+    }
+
+    private fun mostrarAba(ferramentas: Boolean) {
+        prefs.edit().putBoolean("aba_ferramentas", ferramentas).apply()
+        abaServidor.visibility = if (ferramentas) View.GONE else View.VISIBLE
+        abaFerramentas.visibility = if (ferramentas) View.VISIBLE else View.GONE
+        btnAbaServidor.setTypeface(null, if (ferramentas) Typeface.NORMAL else Typeface.BOLD)
+        btnAbaFerramentas.setTypeface(null, if (ferramentas) Typeface.BOLD else Typeface.NORMAL)
+        btnAbaServidor.alpha = if (ferramentas) 0.6f else 1f
+        btnAbaFerramentas.alpha = if (ferramentas) 1f else 0.6f
+        if (ferramentas) atualizarFerramentas()
+    }
+
+    private fun montarServidor(): View {
         val raiz = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), dp(4), dp(14), dp(32))
@@ -263,6 +310,8 @@ class MainActivity : Activity() {
         // 2 · Jogos
         val cJogos = cartao(raiz)
         cJogos.addView(titulo(getString(R.string.sec_jogos), getString(R.string.ajuda_jogos_titulo)) { getString(R.string.ajuda_jogos) })
+        // Os controles menos usados (modo, acesso, servidores) ficam no cartão "Avançado", montado no fim
+        val cAvancado = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val grupo = RadioGroup(this).apply { orientation = RadioGroup.VERTICAL }
         rbPasta = RadioButton(this).apply { text = getString(R.string.modo_pasta); id = View.generateViewId() }
         rbUsb = RadioButton(this).apply { text = getString(R.string.modo_usb); id = View.generateViewId() }
@@ -275,7 +324,8 @@ class MainActivity : Activity() {
             prefs.edit().putString("modo", if (id == rbUsb.id) ServidorService.MODO_USB else ServidorService.MODO_PASTA).apply()
             atualizarModo()
         }
-        cJogos.addView(grupo)
+        cAvancado.addView(texto(getString(R.string.av_modo), 14f).apply { setPadding(0, dp(6), 0, 0) })
+        cAvancado.addView(grupo)
 
         painelPasta = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         grupoAcesso = RadioGroup(this).apply { orientation = RadioGroup.HORIZONTAL }
@@ -296,12 +346,18 @@ class MainActivity : Activity() {
                 else -> ACESSO_NORMAL
             })
         }
-        painelPasta.addView(linha(grupoAcesso, info(getString(R.string.ajuda_acesso_titulo)) { getString(R.string.ajuda_acesso) }))
+        cAvancado.addView(linha(grupoAcesso, info(getString(R.string.ajuda_acesso_titulo)) { getString(R.string.ajuda_acesso) }))
         tvPasta = texto().apply { setTypeface(typeface, Typeface.BOLD) }.also { painelPasta.addView(it) }
         btnCriarPastas = botao(getString(R.string.btn_criar_opl)) { criarPastasOpl() }.also { painelPasta.addView(it) }
+        btnTrocarPasta = botao(getString(R.string.btn_trocar_pasta)) {
+            escolhaAberta = !escolhaAberta
+            atualizarEscolha()
+        }.also { painelPasta.addView(it) }
+        painelEscolha = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         listaVolumes = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        painelPasta.addView(listaVolumes)
-        btnOutraPasta = botao("") { outraPasta() }.also { painelPasta.addView(it) }
+        painelEscolha.addView(listaVolumes)
+        btnOutraPasta = botao("") { outraPasta() }.also { painelEscolha.addView(it) }
+        painelPasta.addView(painelEscolha)
         cJogos.addView(painelPasta)
 
         painelUsb = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -317,10 +373,31 @@ class MainActivity : Activity() {
         val cPs2 = cartao(raiz)
         cPs2.addView(titulo(getString(R.string.sec_ps2)))
         cPs2.addView(botao(getString(R.string.btn_config_ps2)) { mostrarConfigPs2() })
-        cPs2.addView(texto(getString(R.string.servidores), 14f).apply { setPadding(0, dp(8), 0, 0) })
-        cbSmb = caixaServidor(cPs2, "smb", getString(R.string.srv_smb)) { ajudaSmb() }
-        cbUdpfs = caixaServidor(cPs2, "udpfs", getString(R.string.srv_udpfs)) { getString(R.string.ajuda_udpfs, ipPs2()) }
-        cbUdpbd = caixaServidor(cPs2, "udpbd", getString(R.string.srv_udpbd)) { getString(R.string.ajuda_udpbd, ipPs2()) }
+
+        // ⚙ Avançado (recolhido)
+        val cAv = cartao(raiz)
+        val cabecalho = titulo(getString(R.string.sec_avancado))
+        cAv.addView(cabecalho)
+        cAv.addView(cAvancado)
+        cabecalho.setOnClickListener {
+            val abrir = cAvancado.visibility != View.VISIBLE
+            prefs.edit().putBoolean("avancado", abrir).apply()
+            cAvancado.visibility = if (abrir) View.VISIBLE else View.GONE
+            (cabecalho as TextView).text = getString(R.string.sec_avancado) + if (abrir) "  ▾" else "  ▸"
+        }
+        val abertoAv = prefs.getBoolean("avancado", false)
+        cAvancado.visibility = if (abertoAv) View.VISIBLE else View.GONE
+        (cabecalho as TextView).text = getString(R.string.sec_avancado) + if (abertoAv) "  ▾" else "  ▸"
+        cAvancado.addView(texto(getString(R.string.servidores), 14f).apply { setPadding(0, dp(8), 0, 0) })
+        cbSmb = caixaServidor(cAvancado, "smb", getString(R.string.srv_smb)) { ajudaSmb() }
+        cbUdpfs = caixaServidor(cAvancado, "udpfs", getString(R.string.srv_udpfs)) { getString(R.string.ajuda_udpfs, ipPs2()) }
+        cbUdpbd = caixaServidor(cAvancado, "udpbd", getString(R.string.srv_udpbd)) { getString(R.string.ajuda_udpbd, ipPs2()) }
+        cbDescompactar = CheckBox(this).apply {
+            text = getString(R.string.op_descompactar)
+            isChecked = prefs.getBoolean(ServidorService.PREF_DESCOMPACTAR, true)
+            setOnCheckedChangeListener { _, m -> prefs.edit().putBoolean(ServidorService.PREF_DESCOMPACTAR, m).apply() }
+        }
+        cAvancado.addView(linha(cbDescompactar, info(getString(R.string.op_descompactar)) { getString(R.string.ajuda_descompactar) }))
 
         // Log
         val cLog = cartao(raiz)
@@ -331,7 +408,159 @@ class MainActivity : Activity() {
         ))
         tvLog = texto(tamanho = 12f).apply { typeface = Typeface.MONOSPACE; setTextIsSelectable(true) }.also { cLog.addView(it) }
 
-        return ScrollView(this).apply { addView(raiz) }
+        return raiz
+    }
+
+    /** Lista de volumes e "outra pasta": aberta quando não há pasta boa ou o usuário tocou em "Trocar". */
+    private fun atualizarEscolha() {
+        val ok = pastaAbriu == true
+        painelEscolha.visibility = if (escolhaAberta || !ok) View.VISIBLE else View.GONE
+        btnTrocarPasta.visibility = if (ok) View.VISIBLE else View.GONE
+        btnTrocarPasta.text = getString(if (escolhaAberta) R.string.btn_fechar_escolha else R.string.btn_trocar_pasta)
+    }
+
+    // ------------------------------------------------------------------ aba Ferramentas
+
+    private fun montarFerramentas(): View {
+        val raiz = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(4), dp(14), dp(32))
+        }
+
+        // Tarefa em andamento
+        cartaoTarefa = cartao(raiz)
+        tvTarefa = texto(tamanho = 16f).apply { setTypeface(typeface, Typeface.BOLD) }.also { cartaoTarefa.addView(it) }
+        barraTarefa = android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 1000 }
+        cartaoTarefa.addView(barraTarefa, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        tvTarefaDetalhe = texto(tamanho = 13f).also { cartaoTarefa.addView(it) }
+        cartaoTarefa.addView(botao(getString(R.string.cancelar)) { Ferramentas.cancelar() })
+
+        val cPasta = cartao(raiz)
+        cPasta.addView(titulo(getString(R.string.ft_sec_pasta), getString(R.string.ft_sec_pasta)) { getString(R.string.ft_ajuda_pasta) })
+        tvFtPasta = texto(tamanho = 14f).also { cPasta.addView(it) }
+        botoesFt += botao(getString(R.string.ft_btn_ver)) { verJogos() }.also { cPasta.addView(it) }
+        botoesFt += botao(getString(R.string.ft_btn_organizar)) {
+            confirmar(getString(R.string.ft_btn_organizar), getString(R.string.ft_conf_organizar)) {
+                tarefa(getString(R.string.ft_btn_organizar)) { Ferramentas.organizar(this, it) }
+            }
+        }.also { cPasta.addView(it) }
+
+        val cCapas = cartao(raiz)
+        cCapas.addView(titulo(getString(R.string.ft_sec_capas), getString(R.string.ft_sec_capas)) { getString(R.string.ft_ajuda_capas) })
+        val grupoTam = RadioGroup(this).apply { orientation = RadioGroup.HORIZONTAL }
+        val rbPeq = RadioButton(this).apply { text = getString(R.string.ft_capa_opl); id = View.generateViewId() }
+        val rbGrd = RadioButton(this).apply { text = getString(R.string.ft_capa_ript); id = View.generateViewId() }
+        grupoTam.addView(rbPeq)
+        grupoTam.addView(rbGrd)
+        if (prefs.getBoolean("capa_grande", false)) rbGrd.isChecked = true else rbPeq.isChecked = true
+        grupoTam.setOnCheckedChangeListener { _, id -> prefs.edit().putBoolean("capa_grande", id == rbGrd.id).apply() }
+        cCapas.addView(grupoTam)
+        botoesFt += botao(getString(R.string.ft_btn_baixar_capas)) {
+            val grande = prefs.getBoolean("capa_grande", false)
+            tarefa(getString(R.string.ft_btn_baixar_capas)) { Ferramentas.baixarCapas(this, it, if (grande) 280 else 140, if (grande) 400 else 200) }
+        }.also { cCapas.addView(it) }
+        botoesFt += botao(getString(R.string.ft_btn_corrigir)) {
+            tarefa(getString(R.string.ft_btn_corrigir)) { Ferramentas.corrigirCapas(this, it) }
+        }.also { cCapas.addView(it) }
+        botoesFt += botao(getString(R.string.ft_btn_tar)) {
+            tarefa(getString(R.string.ft_btn_tar)) { Ferramentas.empacotarArt(this, it) }
+        }.also { cCapas.addView(linha(it, info(getString(R.string.ft_btn_tar)) { getString(R.string.ft_ajuda_tar) })) }
+
+        val cComp = cartao(raiz)
+        cComp.addView(titulo(getString(R.string.ft_sec_compactar), getString(R.string.ft_sec_compactar)) { getString(R.string.ft_ajuda_compactar) })
+        botoesFt += botao(getString(R.string.ft_btn_compactar)) { escolherJogos(compactar = true) }.also { cComp.addView(it) }
+        botoesFt += botao(getString(R.string.ft_btn_descompactar)) { escolherJogos(compactar = false) }.also { cComp.addView(it) }
+
+        return raiz
+    }
+
+    private fun atualizarFerramentas() {
+        if (!::tvFtPasta.isInitialized) return
+        val pasta = pastaSalva()
+        tvFtPasta.text = if (pasta == null || !rbPasta.isChecked) getString(R.string.ft_sem_pasta_escolhida) else Fonte.descricao(this, pasta)
+        val ocupado = Ferramentas.ocupado
+        cartaoTarefa.visibility = if (ocupado) View.VISIBLE else View.GONE
+        if (ocupado) {
+            tvTarefa.text = Ferramentas.titulo
+            barraTarefa.isIndeterminate = Ferramentas.progresso < 0
+            if (Ferramentas.progresso >= 0) barraTarefa.progress = Ferramentas.progresso
+            tvTarefaDetalhe.text = Ferramentas.detalhe
+        }
+        val pode = !ocupado && pasta != null && rbPasta.isChecked
+        for (b in botoesFt) b.isEnabled = pode
+    }
+
+    private fun confirmar(titulo: String, msg: String, acao: () -> Unit) {
+        AlertDialog.Builder(this).setTitle(titulo).setMessage(msg)
+            .setPositiveButton(R.string.ok) { _, _ -> acao() }
+            .setNegativeButton(R.string.cancelar, null).show()
+    }
+
+    /** Roda uma ferramenta na pasta escolhida (a raiz é aberta já na thread da tarefa). */
+    private fun tarefa(nome: String, corpo: (br.ps2ponte.core.fs.VFile) -> String) {
+        val pasta = pastaSalva() ?: return aviso(getString(R.string.av_escolha_pasta))
+        Ferramentas.rodar(this, nome) { corpo(Fonte.raiz(this, pasta)) }
+    }
+
+    /** Lista os jogos (com o código e se têm capa) numa thread e mostra num diálogo. */
+    private fun verJogos() {
+        val pasta = pastaSalva() ?: return
+        aviso(getString(R.string.ft_lendo))
+        fundo.execute {
+            val texto = try {
+                val raiz = Fonte.raiz(this, pasta)
+                val art = raiz.listFiles()?.firstOrNull { it.isDirectory && it.name.equals("ART", true) }
+                    ?.listFiles()?.map { it.name.uppercase() }?.toHashSet() ?: hashSetOf()
+                val lista = Ferramentas.jogos(raiz)
+                if (lista.isEmpty()) getString(R.string.ft_nenhum_jogo)
+                else lista.joinToString("\n") { j ->
+                    val id = Ferramentas.lerId(j)
+                    val capa = id != null && art.any { it.startsWith("${id}_COV.") }
+                    val mb = j.arquivo.length() / (1024 * 1024)
+                    "${if (capa) "🖼" else "▫"} ${j.pasta}/${j.nome}\n     ${id ?: getString(R.string.ft_sem_codigo)} · $mb MiB"
+                } + "\n\n" + getString(R.string.ft_legenda)
+            } catch (e: Exception) {
+                getString(R.string.pasta_erro, e.message ?: e.javaClass.simpleName)
+            }
+            runOnUiThread { if (!isFinishing) dialogo(getString(R.string.ft_btn_ver), texto) }
+        }
+    }
+
+    /** Escolhe quais jogos compactar (ISO) ou descompactar (ZSO/CSO), e se apaga os originais. */
+    private fun escolherJogos(compactar: Boolean) {
+        val pasta = pastaSalva() ?: return
+        fundo.execute {
+            val lista = try {
+                Ferramentas.jogos(Fonte.raiz(this, pasta)).filter { it.compactado != compactar }
+            } catch (e: Exception) {
+                runOnUiThread { aviso(getString(R.string.pasta_erro, e.message ?: "")) }
+                return@execute
+            }
+            runOnUiThread {
+                if (isFinishing) return@runOnUiThread
+                if (lista.isEmpty()) return@runOnUiThread aviso(getString(if (compactar) R.string.ft_nada_compactar else R.string.ft_nada_descompactar))
+                val marcados = BooleanArray(lista.size)
+                val nomes = lista.map { "${it.pasta}/${it.nome}  (${it.arquivo.length() / (1024 * 1024)} MiB)" }.toTypedArray()
+                val titulo = getString(if (compactar) R.string.ft_btn_compactar else R.string.ft_btn_descompactar)
+                AlertDialog.Builder(this).setTitle(titulo)
+                    .setMultiChoiceItems(nomes, marcados) { _, i, m -> marcados[i] = m }
+                    .setPositiveButton(R.string.ok) { _, _ ->
+                        val escolhidos = lista.filterIndexed { i, _ -> marcados[i] }
+                        if (escolhidos.isEmpty()) return@setPositiveButton
+                        val fazer = { apagar: Boolean ->
+                            tarefa(titulo) { _ ->
+                                if (compactar) Ferramentas.compactar(this, escolhidos, apagar) else Ferramentas.descompactar(this, escolhidos, apagar)
+                            }
+                        }
+                        AlertDialog.Builder(this).setTitle(titulo)
+                            .setMessage(getString(if (compactar) R.string.ft_conf_compactar else R.string.ft_conf_descompactar, escolhidos.size))
+                            .setPositiveButton(R.string.ft_manter) { _, _ -> fazer(false) }
+                            .setNeutralButton(R.string.ft_apagar) { _, _ -> fazer(true) }
+                            .setNegativeButton(R.string.cancelar, null).show()
+                    }
+                    .setNegativeButton(R.string.cancelar, null).show()
+            }
+        }
     }
 
     private fun caixaServidor(pai: LinearLayout, chave: String, rotulo: String, ajuda: () -> String): CheckBox {
@@ -428,6 +657,7 @@ class MainActivity : Activity() {
             pastaAbriu = false
             tvPasta.text = getString(R.string.pasta_nenhuma)
             btnCriarPastas.visibility = View.GONE
+            atualizarEscolha()
             atualizarPermissoes()
             return
         }
@@ -435,6 +665,7 @@ class MainActivity : Activity() {
         pastaAbriu = null
         tvPasta.text = "$descricao  ${getString(R.string.pasta_verificando)}"
         btnCriarPastas.visibility = View.GONE
+        atualizarEscolha()
         atualizarPermissoes()
 
         if (Fonte.ehPriv(pasta) && Privilegio.modo(pasta) == Privilegio.SHIZUKU && !Privilegio.shizukuPermitido()) {
@@ -477,6 +708,8 @@ class MainActivity : Activity() {
         }
         tvPasta.text = "$descricao  $estado"
         btnCriarPastas.visibility = if (temOpl == false) View.VISIBLE else View.GONE
+        if (temOpl != null) escolhaAberta = false
+        atualizarEscolha()
         atualizarPermissoes()
         atualizarEstado()
     }
@@ -538,6 +771,8 @@ class MainActivity : Activity() {
         rbPasta.isEnabled = livre
         rbUsb.isEnabled = livre
         for (i in 0 until grupoAcesso.childCount) grupoAcesso.getChildAt(i).isEnabled = livre
+        cbDescompactar.isEnabled = livre
+        if (abaFerramentas.visibility == View.VISIBLE) atualizarFerramentas()
     }
 
     private fun medirVelocidade() {

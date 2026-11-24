@@ -134,4 +134,76 @@
     <string name="dica_sem_ps2">⚠ Nenhum sinal do PS2 depois de %1$d s. Confira:\n  • o IP do PS2 está na mesma rede do celular (ex.: %3$s, máscara 255.255.255.0) ou usa DHCP;\n  • o endereço do servidor no PS2 é %2$s;\n  • o LED verde/laranja da porta de rede acende no hub;\n  • o loader usa o protocolo certo (OPL → SMB, NHDDL/Neutrino → UDPFS/UDPBD).</string>
     <string name="dica_outra_rede">⚠ O PS2 (%1$s) não está na rede do cabo (%2$s). O IP dele deveria ser parecido com %3$s; as respostas podem sair pelo Wi-Fi.</string>
     <string name="dica_bateria">⚠ O Android pode pausar o servidor com a tela apagada. Toque em \"Deixar rodar em segundo plano\".</string>
+    <string name="aba_servidor">▶ Servidor</string>
+    <string name="aba_ferramentas">🧰 Ferramentas</string>
+    <string name="sec_avancado">⚙ Avançado</string>
+    <string name="av_modo">De onde vêm os jogos:</string>
+    <string name="btn_trocar_pasta">Trocar a pasta…</string>
+    <string name="btn_fechar_escolha">Fechar</string>
+    <string name="op_descompactar">Servir ZSO/CSO como ISO</string>
+    <string name="ajuda_descompactar">Jogos .zso e .cso aparecem para o PS2 como .iso normais, descompactados na hora pelo celular.
+
+Assim o NHDDL/Neutrino (UDPFS e UDPBD) roda jogos compactados, que ocupam bem menos espaço.
+
+No SMB o .zso continua indo como está, porque o OPL já lê ZSO sozinho e o cabo leva menos bytes. O .cso vira .iso também no SMB.
+
+Se já existir um .iso com o mesmo nome, o compactado fica escondido.</string>
+    <string name="ft_sec_pasta">Pasta do OPL</string>
+    <string name="ft_ajuda_pasta">Ver jogos: lista o que está em DVD/ e CD/, com o código de cada jogo (lido do SYSTEM.CNF) e se ele já tem capa.
+
+Organizar: cria as pastas do OPL (DVD, CD, ART, CFG, VMC…) e leva os jogos soltos na raiz, ou em outras subpastas, para DVD/ (mais de 700 MB) ou CD/. Nada é apagado.</string>
+    <string name="ft_sem_pasta_escolhida">Escolha a pasta dos jogos na aba Servidor.</string>
+    <string name="ft_btn_ver">Ver jogos</string>
+    <string name="ft_btn_organizar">Organizar a pasta</string>
+    <string name="ft_conf_organizar">Criar as pastas do OPL e mover os jogos soltos para DVD/ e CD/?</string>
+    <string name="ft_sec_capas">Capas</string>
+    <string name="ft_ajuda_capas">Baixar: procura a capa de cada jogo sem capa pelo código (banco xlenore/ps2-covers, precisa de internet no celular) e grava em ART/&lt;código>_COV.png.
+
+Converter: transforma JPG/WebP/BMP/PNG da pasta ART em PNG de 8 bits (256 cores), o formato que o OPL e o RiptOPL leem sem erro e que carrega mais rápido.
+
+Tamanho: 140×200 é o padrão do OPL; 280×400 é o padrão do RiptOPL.</string>
+    <string name="ft_capa_opl">140×200 (OPL)</string>
+    <string name="ft_capa_ript">280×400 (RiptOPL)</string>
+    <string name="ft_btn_baixar_capas">Baixar capas que faltam</string>
+    <string name="ft_btn_corrigir">Converter capas para PNG 8-bit</string>
+    <string name="ft_btn_tar">Empacotar ART/art.tar</string>
+    <string name="ft_ajuda_tar">Junta todas as imagens PNG da pasta ART num só arquivo ART/art.tar (sem compactação). O RiptOPL lê as capas desse arquivo muito mais rápido que de centenas de arquivos soltos (ative em Interface › Artwork Settings). Os arquivos soltos continuam lá, para o OPL comum.
+
+Refaça depois de baixar capas novas.</string>
+    <string name="ft_sec_compactar">Compactar jogos</string>
+    <string name="ft_ajuda_compactar">Compactar: ISO → ZSO (LZ4), que ocupa menos espaço. O OPL lê ZSO direto; para o NHDDL/Neutrino o app descompacta na hora (opção \"Servir ZSO/CSO como ISO\" no Avançado). Antes de apagar qualquer coisa, o ZSO novo é conferido com a ISO.
+
+Descompactar: ZSO/CSO → ISO.
+
+Pode demorar alguns minutos por jogo em celular mais fraco; dá para usar outros apps enquanto isso.</string>
+    <string name="ft_btn_compactar">Compactar ISO → ZSO…</string>
+    <string name="ft_btn_descompactar">Descompactar ZSO/CSO → ISO…</string>
+    <string name="ft_conf_compactar">Compactar %1$d jogo(s). Depois de conferido, apagar a ISO original para liberar espaço?</string>
+    <string name="ft_conf_descompactar">Descompactar %1$d jogo(s). Depois, apagar o arquivo compactado?</string>
+    <string name="ft_manter">Manter originais</string>
+    <string name="ft_apagar">Apagar originais</string>
+    <string name="ft_nada_compactar">Nenhuma ISO em DVD/ ou CD/.</string>
+    <string name="ft_nada_descompactar">Nenhum ZSO/CSO em DVD/ ou CD/.</string>
+    <string name="ft_lendo">Lendo os jogos…</string>
+    <string name="ft_nenhum_jogo">Nenhum jogo em DVD/ ou CD/.</string>
+    <string name="ft_sem_codigo">sem código</string>
+    <string name="ft_legenda">🖼 = tem capa   ▫ = sem capa</string>
+    <string name="ft_cancelado">%1$s: cancelado.</string>
+    <string name="ft_erro">%1$s: erro — %2$s</string>
+    <string name="ft_sem_pasta">não achei a pasta %1$s</string>
+    <string name="ft_organizado">Pasta organizada: %1$d jogo(s) movido(s).</string>
+    <string name="ft_nao_movidos">Não movidos (já existem no destino ou o Android não deixou): %1$s</string>
+    <string name="ft_nomes_longos">⚠ %1$d jogo(s) com nome de mais de 64 letras: alguns loaders cortam ou não mostram.</string>
+    <string name="ft_capas_baixadas">Capas: %1$d baixada(s) (de %2$d jogos).</string>
+    <string name="ft_sem_id">%1$d jogo(s) sem código legível (ISO de CD em .bin, imagem estranha).</string>
+    <string name="ft_capas_nao_achadas">Sem capa no banco: %1$s</string>
+    <string name="ft_sem_internet">sem internet no celular (o cabo do PS2 não dá internet; use Wi-Fi ou dados)</string>
+    <string name="ft_capas_corrigidas">Capas: %1$d convertida(s) para PNG 8-bit (de %2$d imagens).</string>
+    <string name="ft_capas_falharam">Não consegui ler: %1$s</string>
+    <string name="ft_art_vazia">Nenhum PNG na pasta ART.</string>
+    <string name="ft_art_ok">ART/art.tar criado: %1$d imagens, %2$.1f MiB.</string>
+    <string name="ft_nao_substituiu">não consegui gravar %1$s</string>
+    <string name="ft_sem_espaco">sem espaço livre para %1$s</string>
+    <string name="ft_compactados">%1$d jogo(s) compactado(s); %2$.0f MiB economizados.</string>
+    <string name="ft_descompactados">%1$d jogo(s) descompactado(s).</string>
 </resources>
