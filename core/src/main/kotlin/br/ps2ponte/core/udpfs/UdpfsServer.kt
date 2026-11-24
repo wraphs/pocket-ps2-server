@@ -525,10 +525,24 @@ class UdpfsServer(
             log.log(t("UDPFS: abriu $path (${f.length() / (1024 * 1024)} MiB)", "UDPFS: opened $path (${f.length() / (1024 * 1024)} MiB)"))
             sendOpenReply(d, addr, id, if (id >= 0) Stat.of(f) else null)
         } catch (e: IOException) {
+            if (writable && ehSoLeitura(e)) {
+                // Pendrive montado só para leitura (NTFS no Android, p. ex.): o loader tenta gravar caches como
+                // DVD/games.bin; não é erro de leitura de jogo. Avisa uma vez só.
+                if (!avisouSoLeitura) {
+                    avisouSoLeitura = true
+                    log.log(t("UDPFS: a pasta está só para leitura; o PS2 não consegue gravar ($path). Os jogos abrem normalmente.",
+                        "UDPFS: the folder is read-only; the PS2 cannot write ($path). Games open normally."))
+                }
+                return sendOpenReply(d, addr, -EROFS)
+            }
             log.log(t("UDPFS: erro ao abrir $path: ${e.message}", "UDPFS: error opening $path: ${e.message}"))
             sendOpenReply(d, addr, -EIO)
         }
     }
+
+    @Volatile private var avisouSoLeitura = false
+
+    private fun ehSoLeitura(e: IOException) = e.message?.let { "EROFS" in it || "Read-only" in it } == true
 
     private fun handleClose(d: DatagramSocket, addr: InetSocketAddress, p: ByteArray) {
         if (p.size < 8) return sendData(d, addr, reply8(CLOSE_REPLY, -EINVAL))
@@ -817,7 +831,7 @@ class UdpfsServer(
         const val O_WRONLY = 0x0002; const val O_RDWR = 0x0003
         const val O_APPEND = 0x0100; const val O_CREAT = 0x0200; const val O_TRUNC = 0x0400
 
-        const val ENOENT = 2; const val EIO = 5; const val EBADF = 9; const val EACCES = 13; const val EEXIST = 17
+        const val ENOENT = 2; const val EIO = 5; const val EROFS = 30; const val EBADF = 9; const val EACCES = 13; const val EEXIST = 17
         const val ENOTDIR = 20; const val EISDIR = 21; const val EINVAL = 22; const val EMFILE = 24; const val ENOTEMPTY = 39
 
         const val MAX_PAYLOAD = 1408

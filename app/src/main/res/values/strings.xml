@@ -224,4 +224,5 @@ RiptOPL with SMB2: same port and share; any user and password. The app answers S
     <string name="ft_converter_apagar">Convert, delete originals</string>
     <string name="ft_org_ps2">• %1$d PS2 game(s) → DVD/ or CD/</string>
     <string name="ft_org_conversao">🔄 %1$d conversion(s), %2$.1f GB to process. It may take a few minutes.</string>
+    <string name="ft_so_leitura">🔒 The folder is read-only (NTFS drives usually are on Android, even with root). The PS2 reads the games normally, but the app cannot write covers, art.tar, compress or organize. For that, format the drive as exFAT on a PC or use internal storage.</string>
 </resources>

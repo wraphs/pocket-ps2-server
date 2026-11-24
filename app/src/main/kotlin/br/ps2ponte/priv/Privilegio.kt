@@ -120,7 +120,9 @@ object Privilegio {
             }, "priv-stderr").apply { isDaemon = true; start() }
         }
 
-        fun vivo() = morto == null && try { processo.exitValue(); false } catch (e: IllegalThreadStateException) { true }
+        // exitValue() lança enquanto o processo vive. No Shizuku a exceção atravessa o Binder e chega como
+        // IllegalArgumentException (a superclasse que o Parcel conhece), não como IllegalThreadStateException.
+        fun vivo() = morto == null && try { processo.exitValue(); false } catch (e: IllegalArgumentException) { true }
 
         private fun stderr() = synchronized(erros) { erros.toString().trim().lines().lastOrNull().orEmpty() }
 

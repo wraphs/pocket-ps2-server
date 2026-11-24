@@ -138,6 +138,8 @@ object Ferramentas {
             val raiz = Fonte.raiz(ctx, pasta)
             var c = atualizarCatalogo(ctx, pasta, raiz)
             val msgs = mutableListOf<String>()
+            // Só leitura: nada de automático que grava (o resumo da aba mostra o cadeado)
+            if (!gravavel(pasta, raiz)) return@rodar ""
             if (prefs.getBoolean(PREF_AUTO_ORGANIZAR, false) && !Estado.rodando && c.foraDoLugar + c.ps1.size > 0) {
                 val o = planejarOrganizacao(ctx, pasta, raiz)
                 if (!o.vazio) {
@@ -158,6 +160,31 @@ object Ferramentas {
         }
     }
 
+    @Volatile private var gravavelDe: Pair<String, Boolean>? = null
+
+    /** A pasta aceita gravação? (Pendrive em NTFS costuma ser montado só para leitura no Android.) */
+    fun gravavel(pasta: String, raiz: VFile): Boolean {
+        gravavelDe?.let { if (it.first == pasta) return it.second }
+        val teste = raiz.child(".pocketps2-teste")
+        val ok = try {
+            teste.open(true).close()
+            teste.delete()
+            true
+        } catch (e: IOException) {
+            false
+        }
+        gravavelDe = pasta to ok
+        return ok
+    }
+
+    /** A última pasta testada é só leitura. */
+    val soLeitura get() = gravavelDe?.second == false
+
+    /** Para as ferramentas que gravam: falha logo, explicando, em vez de um "Read-only file system" no meio. */
+    fun exigirGravacao(ctx: Context, pasta: String, raiz: VFile) {
+        if (!gravavel(pasta, raiz)) throw IOException(ctx.getString(R.string.ft_so_leitura))
+    }
+
     /** Organização que precisa de confirmação (conversões de PS1), achada pela rotina automática. */
     @Volatile var pedido: Organizacao? = null
 
@@ -165,7 +192,7 @@ object Ferramentas {
     fun depois(ctx: Context, pasta: String, raiz: VFile, mexeuNaArte: Boolean): String {
         val prefs = ctx.getSharedPreferences("ps2ponte", Context.MODE_PRIVATE)
         val c = atualizarCatalogo(ctx, pasta, raiz)
-        if (mexeuNaArte && prefs.getBoolean(PREF_AUTO_TAR, false) && c.tarDesatualizado) {
+        if (mexeuNaArte && prefs.getBoolean(PREF_AUTO_TAR, false) && c.tarDesatualizado && gravavel(pasta, raiz)) {
             val r = empacotarArt(ctx, raiz)
             atualizarCatalogo(ctx, pasta, raiz)
             return "\n" + ctx.getString(R.string.ft_auto_tar) + " " + r
@@ -233,6 +260,7 @@ object Ferramentas {
     }
 
     fun planejarOrganizacao(ctx: Context, pasta: String, raiz: VFile): Organizacao {
+        exigirGravacao(ctx, pasta, raiz)
         val c = atualizarCatalogo(ctx, pasta, raiz)
         val ps2 = jogosDe(raiz, c.jogos.filter { !it.ps1 && it.foraDoLugar })
         return Organizacao(pasta, raiz, ps2, OrganizadorPs1(raiz).planejar(c, destinoPs1(ctx)))

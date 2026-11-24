@@ -455,7 +455,7 @@ class MainActivity : Activity() {
         tvResumo = texto(tamanho = 14f).apply { setTypeface(typeface, Typeface.BOLD) }.also { cPasta.addView(it) }
         botoesFt += botao(getString(R.string.ft_btn_ver)) { verJogos() }.also { cPasta.addView(it) }
         botoesFt += botao(getString(R.string.ft_btn_atualizar)) {
-            tarefa(getString(R.string.ft_btn_atualizar)) { _, _ -> "" }
+            tarefa(getString(R.string.ft_btn_atualizar), grava = false) { _, _ -> "" }
         }.also { cPasta.addView(it) }
         botoesFt += botao(getString(R.string.ft_btn_organizar)) { planejarOrganizacao() }.also { cPasta.addView(it) }
         botoesFt += botao(getString(R.string.ft_btn_verificar)) { verificarArquivos() }
@@ -537,7 +537,8 @@ class MainActivity : Activity() {
             else -> buildString {
                 append(getString(R.string.ft_resumo, c.ps2.size, c.ps1.size, c.semCapa, c.isos.size))
                 if (c.foraDoLugar > 0) append("\n").append(getString(R.string.ft_resumo_fora, c.foraDoLugar))
-                if (c.tarDesatualizado && c.tarData > 0) append("\n").append(getString(R.string.ft_resumo_tar))
+                if (c.tarDesatualizado && c.tarData > 0 && !Ferramentas.soLeitura) append("\n").append(getString(R.string.ft_resumo_tar))
+                if (Ferramentas.soLeitura) append("\n").append(getString(R.string.ft_so_leitura))
             }
         }
         tvResumo.visibility = if (tvResumo.text.isEmpty()) View.GONE else View.VISIBLE
@@ -563,10 +564,11 @@ class MainActivity : Activity() {
      * Roda uma ferramenta na pasta escolhida (a raiz é aberta já na thread da tarefa). No fim, o catálogo é
      * atualizado e, se [arte] e o interruptor estiver ligado, o art.tar é refeito.
      */
-    private fun tarefa(nome: String, arte: Boolean = false, corpo: (String, br.ps2ponte.core.fs.VFile) -> String) {
+    private fun tarefa(nome: String, arte: Boolean = false, grava: Boolean = true, corpo: (String, br.ps2ponte.core.fs.VFile) -> String) {
         val pasta = pastaSalva() ?: return aviso(getString(R.string.av_escolha_pasta))
         Ferramentas.rodar(this, nome) {
             val r = Fonte.raiz(this, pasta)
+            if (grava) Ferramentas.exigirGravacao(this, pasta, r)
             val res = corpo(pasta, r)
             (res + Ferramentas.depois(this, pasta, r, arte)).trim().ifEmpty { getString(R.string.ft_lista_ok) }
         }
@@ -629,7 +631,7 @@ class MainActivity : Activity() {
         val c = Ferramentas.catalogo
         if (c == null) {
             aviso(getString(R.string.ft_lendo))
-            tarefa(getString(R.string.ft_btn_atualizar)) { _, _ -> "" }
+            tarefa(getString(R.string.ft_btn_atualizar), grava = false) { _, _ -> "" }
             return
         }
         val texto = if (c.jogos.isEmpty()) getString(R.string.ft_nenhum_jogo)
