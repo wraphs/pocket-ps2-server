@@ -223,7 +223,7 @@ RiptOPL with SMB2: same port and share; any user and password. The app answers S
     <string name="ft_converter_apagar">Convert, delete originals</string>
     <string name="ft_org_ps2">• %1$d PS2 game(s) → DVD/ or CD/</string>
     <string name="ft_org_conversao">🔄 %1$d conversion(s), %2$.1f GB to process. It may take a few minutes.</string>
-    <string name="ft_so_leitura">🔒 The folder is read-only (NTFS drives usually are on Android, even with root). The PS2 reads the games normally, but the app cannot write covers, art.tar, compress or organize. For that, format the drive as exFAT on a PC or use internal storage.</string>
+    <string name="ft_so_leitura">🔒 Read-only drive (Android mounts NTFS like this). Covers, art.tar, OPL settings and saves (VMC) go to a support folder on the phone, and the PS2 and this tab see everything together. Moving, compressing and converting games needs an exFAT drive.</string>
     <string name="jg_buscar">Search games…</string>
     <string name="jg_ferramentas">Tools</string>
     <string name="jg_nenhum">No games found. Copy .iso (PS2) or .VCD/.cue (PS1) files to the folder and tap ⚙ › Refresh.</string>
@@ -238,10 +238,8 @@ RiptOPL with SMB2: same port and share; any user and password. The app answers S
     <string name="est_mini">Mini: densest, small covers</string>
     <string name="est_lista">List: compact, games as a list</string>
     <string name="est_classico">Classic: the previous look</string>
-    <string name="ft_btn_liberar">Try to enable writing (root)</string>
-    <string name="ft_liberar_ajuda">With root, the app can try to remount the drive for writing (mount -o remount,rw). It only works if Android has an NTFS driver that can write; if not, the app tells you and nothing changes. Back up first: writing NTFS from Android is less tested than exFAT.</string>
-    <string name="ft_liberar_ok">Writing enabled on %1$s. The tools can write now (until the drive is unplugged).</string>
-    <string name="ft_liberar_falhou">Android would not allow writing on %1$s (%2$s). Format it as exFAT on a PC or use internal storage.</string>
-    <string name="ft_liberar_sem_root">this phone isn\'t rooted (su not found)</string>
-    <string name="ft_liberar_sem_ponto">this folder isn\'t on a USB drive</string>
+    <string name="ft_so_leitura_mover">the drive is read-only (NTFS on Android): moving, compressing and converting games needs to write to it. Format it as exFAT on a PC (copy the games first) or use internal storage.</string>
+    <string name="ft_apoio_onde">Support folder: %1$s (removed if the app is uninstalled).</string>
+    <string name="jg_log">Games log</string>
+    <string name="jg_log_vazio">Nothing here yet.</string>
 </resources>

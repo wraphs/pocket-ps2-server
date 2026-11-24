@@ -113,7 +113,8 @@ class ServidorService : Service() {
             val novos = mutableListOf<PonteServer>()
             if (modo == MODO_PASTA) {
                 val nome = Fonte.descricao(this, pasta)
-                val raiz = Fonte.raiz(this, pasta)
+                // Pendrive só leitura (NTFS): pasta de apoio no celular por cima, para VMC/CFG/capas
+                val raiz = Ferramentas.raizDe(this, pasta)
                 if (!raiz.isDirectory) throw IllegalStateException(getString(R.string.err_pasta_sumiu, nome))
                 Estado.log(getString(R.string.log_pasta, nome))
                 // Jogos .zso/.cso aparecem como .iso, descompactados na hora. No SMB o ZSO vai como está:

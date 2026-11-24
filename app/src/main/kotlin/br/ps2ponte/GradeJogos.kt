@@ -132,7 +132,7 @@ class GradeJogos(
 
     /** Só na thread do carregador. */
     private fun carregar(p: String, c: Catalogo?, k: String, largura: Int): Bitmap? {
-        val r = raiz ?: Fonte.raiz(act, p).also { raiz = it }
+        val r = raiz ?: Ferramentas.raizDe(act, p).also { raiz = it }
         if (arteDe !== c || arte.isEmpty()) {
             val dir = r.listFiles()?.firstOrNull { it.isDirectory && it.name.equals("ART", true) }
             arte = dir?.listFiles()?.filter { it.isFile }?.associateBy { it.name.uppercase() } ?: emptyMap()

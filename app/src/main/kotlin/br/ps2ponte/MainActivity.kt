@@ -519,7 +519,11 @@ class MainActivity : Activity() {
                 override fun afterTextChanged(s: android.text.Editable?) { grade.filtrar(s?.toString().orEmpty()); atualizarVazio() }
             })
         }
-        topo.addView(linha(busca, botao("⚙") { abrirFerramentas() }.apply { contentDescription = getString(R.string.jg_ferramentas) }))
+        topo.addView(linha(
+            busca,
+            botao("📜") { mostrarLogJogos() }.apply { contentDescription = getString(R.string.jg_log) },
+            botao("⚙") { abrirFerramentas() }.apply { contentDescription = getString(R.string.jg_ferramentas) },
+        ))
         tela.addView(topo)
 
         grade = GradeJogos(this, estilo.escala, estilo.texto, estilo.coluna, estilo.lista) { detalhesJogo(it) }
@@ -531,17 +535,27 @@ class MainActivity : Activity() {
         return tela
     }
 
-    /** Pasta só leitura: explica e, com root, oferece remontar o pendrive para gravação. */
+    /** Log da aba Jogos (ferramentas), separado do log do servidor. */
+    private fun mostrarLogJogos() {
+        val tv = texto(Estado.textoJogos().ifEmpty { getString(R.string.jg_log_vazio) }, 12f).apply {
+            typeface = Typeface.MONOSPACE
+            setTextIsSelectable(true)
+            setPadding(dp(16), dp(8), dp(16), dp(8))
+        }
+        AlertDialog.Builder(this).setTitle(R.string.jg_log).setView(ScrollView(this).apply { addView(tv) })
+            .setPositiveButton(R.string.btn_fechar_escolha, null)
+            .setNeutralButton(R.string.btn_copiar) { _, _ ->
+                (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText(getString(R.string.jg_log), Estado.textoJogos()))
+                aviso(getString(R.string.log_copiado))
+            }
+            .setNegativeButton(R.string.btn_limpar) { _, _ -> Estado.limparJogos() }
+            .show()
+    }
+
+    /** Pendrive só leitura: explica a pasta de apoio. */
     private fun mostrarSoLeitura() {
         val pasta = pastaSalva() ?: return
-        val b = AlertDialog.Builder(this).setTitle("🔒").setMessage(getString(R.string.ft_so_leitura) + "\n\n" + getString(R.string.ft_liberar_ajuda))
-            .setNegativeButton(R.string.btn_fechar_escolha, null)
-        if (Ferramentas.pontoDeMontagem(pasta) != null) {
-            b.setPositiveButton(R.string.ft_btn_liberar) { _, _ ->
-                Ferramentas.rodar(this, getString(R.string.ft_btn_liberar)) { Ferramentas.liberarGravacao(this, pasta) }
-            }
-        }
-        b.show()
+        dialogo("🔒", getString(R.string.ft_so_leitura) + "\n\n" + getString(R.string.ft_apoio_onde, Ferramentas.pastaApoio(this, pasta).path))
     }
 
     /** Janela com as ferramentas (organizar, capas, compactar, PS1, verificar). */
@@ -583,7 +597,7 @@ class MainActivity : Activity() {
         if (j.tipo == Catalogo.Tipo.PS2 && !j.foraDoLugar) {
             val compactar = !j.compactado
             b.setPositiveButton(if (compactar) R.string.jg_compactar else R.string.jg_descompactar) { _, _ ->
-                tarefa(getString(if (compactar) R.string.ft_btn_compactar else R.string.ft_btn_descompactar)) { _, r ->
+                tarefa(getString(if (compactar) R.string.ft_btn_compactar else R.string.ft_btn_descompactar), pendrive = true) { _, r ->
                     val jogos = Ferramentas.jogosDe(r, listOf(j))
                     if (compactar) Ferramentas.compactar(this, jogos, false) else Ferramentas.descompactar(this, jogos, false)
                 }
@@ -611,7 +625,7 @@ class MainActivity : Activity() {
         cPasta.addView(titulo(getString(R.string.ft_sec_pasta), getString(R.string.ft_sec_pasta)) { getString(R.string.ft_ajuda_pasta) })
         tvFtPasta = texto(tamanho = 14f).also { cPasta.addView(it) }
         botoesFt += botao(getString(R.string.ft_btn_atualizar)) {
-            tarefa(getString(R.string.ft_btn_atualizar), grava = false) { _, _ -> "" }
+            tarefa(getString(R.string.ft_btn_atualizar)) { _, _ -> "" }
         }.also { cPasta.addView(it) }
         botoesFt += botao(getString(R.string.ft_btn_organizar)) { planejarOrganizacao() }.also { cPasta.addView(it) }
         botoesFt += botao(getString(R.string.ft_btn_verificar)) { verificarArquivos() }
@@ -722,11 +736,11 @@ class MainActivity : Activity() {
      * Roda uma ferramenta na pasta escolhida (a raiz é aberta já na thread da tarefa). No fim, o catálogo é
      * atualizado e, se [arte] e o interruptor estiver ligado, o art.tar é refeito.
      */
-    private fun tarefa(nome: String, arte: Boolean = false, grava: Boolean = true, corpo: (String, br.ps2ponte.core.fs.VFile) -> String) {
+    private fun tarefa(nome: String, arte: Boolean = false, pendrive: Boolean = false, corpo: (String, br.ps2ponte.core.fs.VFile) -> String) {
         val pasta = pastaSalva() ?: return aviso(getString(R.string.av_escolha_pasta))
         Ferramentas.rodar(this, nome) {
-            val r = Fonte.raiz(this, pasta)
-            if (grava) Ferramentas.exigirGravacao(this, pasta, r)
+            if (pendrive) Ferramentas.exigirPendrive(this)
+            val r = Ferramentas.raizDe(this, pasta)
             val res = corpo(pasta, r)
             (res + Ferramentas.depois(this, pasta, r, arte)).trim().ifEmpty { getString(R.string.ft_lista_ok) }
         }
@@ -738,7 +752,7 @@ class MainActivity : Activity() {
     private fun planejarOrganizacao() {
         val pasta = pastaSalva() ?: return aviso(getString(R.string.av_escolha_pasta))
         Ferramentas.rodar(this, getString(R.string.ft_planejando), silencioso = true) {
-            val o = Ferramentas.planejarOrganizacao(this, pasta, Fonte.raiz(this, pasta))
+            val o = Ferramentas.planejarOrganizacao(this, pasta, Ferramentas.raizDe(this, pasta))
             o.manual = true
             Ferramentas.pedido = o
             ""
@@ -776,7 +790,7 @@ class MainActivity : Activity() {
         aviso(getString(R.string.ft_lendo))
         fundo.execute {
             val texto = try {
-                Ferramentas.verificar(this, pasta, Fonte.raiz(this, pasta))
+                Ferramentas.verificar(this, pasta, Ferramentas.raizDe(this, pasta))
             } catch (e: Exception) {
                 getString(R.string.pasta_erro, e.message ?: e.javaClass.simpleName)
             }
@@ -798,7 +812,7 @@ class MainActivity : Activity() {
                 val escolhidos = lista.filterIndexed { i, _ -> marcados[i] }
                 if (escolhidos.isEmpty()) return@setPositiveButton
                 val fazer = { apagar: Boolean ->
-                    tarefa(titulo) { _, r ->
+                    tarefa(titulo, pendrive = true) { _, r ->
                         val jogos = Ferramentas.jogosDe(r, escolhidos)
                         if (compactar) Ferramentas.compactar(this, jogos, apagar) else Ferramentas.descompactar(this, jogos, apagar)
                     }
@@ -1121,7 +1135,7 @@ class MainActivity : Activity() {
         val pasta = pastaSalva() ?: return
         fundo.execute {
             try {
-                val raiz = Fonte.raiz(this, pasta)
+                val raiz = Ferramentas.raizDe(this, pasta)
                 for (nome in listOf("DVD", "CD", "ART", "CFG", "CHT", "LNG", "THM", "VMC", "POPS", "APPS")) raiz.child(nome).mkdirs()
                 runOnUiThread { aviso(getString(R.string.opl_criadas)); verificarPasta() }
             } catch (e: Exception) {

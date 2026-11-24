@@ -11,7 +11,9 @@ import br.ps2ponte.core.ferramentas.Png8
 import br.ps2ponte.core.ferramentas.Tar
 import br.ps2ponte.core.ferramentas.Verificador
 import br.ps2ponte.core.fs.Comprimido
+import br.ps2ponte.core.fs.LocalFile
 import br.ps2ponte.core.fs.LocalTree
+import br.ps2ponte.core.fs.Sobreposicao
 import br.ps2ponte.core.fs.VFile
 import br.ps2ponte.core.fs.VHandle
 import java.io.File
@@ -74,13 +76,13 @@ object Ferramentas {
             val wl = (app.getSystemService(Context.POWER_SERVICE) as PowerManager)
                 .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "pocketps2:ferramentas").apply { acquire(6 * 60 * 60 * 1000L) }
             try {
-                if (!silencioso) Estado.log("🧰 $nome…")
+                if (!silencioso) Estado.logJogos("🧰 $nome…")
                 val r = corpo()
-                if (!silencioso || r.isNotBlank()) Estado.log("🧰 " + r)
+                if (!silencioso || r.isNotBlank()) Estado.logJogos("🧰 " + r)
             } catch (e: Cancelado) {
-                Estado.log("🧰 " + app.getString(R.string.ft_cancelado, nome))
+                Estado.logJogos("🧰 " + app.getString(R.string.ft_cancelado, nome))
             } catch (e: Exception) {
-                Estado.log("🧰 " + app.getString(R.string.ft_erro, nome, e.message ?: e.javaClass.simpleName))
+                Estado.logJogos("🧰 " + app.getString(R.string.ft_erro, nome, e.message ?: e.javaClass.simpleName))
             } finally {
                 if (wl.isHeld) wl.release()
                 titulo = null
@@ -135,12 +137,12 @@ object Ferramentas {
         ultimaRotina = agora
         val prefs = ctx.getSharedPreferences("ps2ponte", Context.MODE_PRIVATE)
         rodar(ctx, ctx.getString(R.string.ft_atualizando), silencioso = true) {
-            val raiz = Fonte.raiz(ctx, pasta)
+            val raiz = raizDe(ctx, pasta)
             var c = atualizarCatalogo(ctx, pasta, raiz)
             val msgs = mutableListOf<String>()
-            // Só leitura: nada de automático que grava (o resumo da aba mostra o cadeado)
-            if (!gravavel(pasta, raiz)) return@rodar ""
-            if (prefs.getBoolean(PREF_AUTO_ORGANIZAR, false) && !Estado.rodando && c.foraDoLugar + c.ps1.size > 0) {
+            // Pendrive só leitura: mover e compactar jogos não dá (o art.tar vai para a pasta de apoio)
+            val podeMexer = !soLeitura
+            if (podeMexer && prefs.getBoolean(PREF_AUTO_ORGANIZAR, false) && !Estado.rodando && c.foraDoLugar + c.ps1.size > 0) {
                 val o = planejarOrganizacao(ctx, pasta, raiz)
                 if (!o.vazio) {
                     if (o.plano.conversoes == 0) msgs += executarOrganizacao(ctx, o, apagarConvertidos = false)
@@ -148,7 +150,7 @@ object Ferramentas {
                     c = catalogo ?: c
                 }
             }
-            if (prefs.getBoolean(PREF_AUTO_ZSO, false) && !Estado.rodando && c.isos.isNotEmpty()) {
+            if (podeMexer && prefs.getBoolean(PREF_AUTO_ZSO, false) && !Estado.rodando && c.isos.isNotEmpty()) {
                 msgs += ctx.getString(R.string.ft_auto_zso) + " " + compactar(ctx, jogosDe(raiz, c.isos), apagarOriginal = true)
                 c = atualizarCatalogo(ctx, pasta, raiz)
             }
@@ -162,8 +164,8 @@ object Ferramentas {
 
     @Volatile private var gravavelDe: Pair<String, Boolean>? = null
 
-    /** A pasta aceita gravação? (Pendrive em NTFS costuma ser montado só para leitura no Android.) */
-    fun gravavel(pasta: String, raiz: VFile): Boolean {
+    /** A pasta de verdade aceita gravação? (Pendrive em NTFS costuma ser montado só para leitura no Android.) */
+    private fun gravavel(pasta: String, raiz: VFile): Boolean {
         gravavelDe?.let { if (it.first == pasta) return it.second }
         val teste = raiz.child(".pocketps2-teste")
         val ok = try {
@@ -178,48 +180,27 @@ object Ferramentas {
         return ok
     }
 
-    /** Ponto de montagem do pendrive da pasta (/mnt/media_rw/<id>); null na memória interna. */
-    fun pontoDeMontagem(pasta: String): String? {
-        val id = if (Fonte.ehSaf(pasta)) {
-            try { android.provider.DocumentsContract.getTreeDocumentId(android.net.Uri.parse(pasta)).substringBefore(':') } catch (e: Exception) { null }
-        } else {
-            val c = if (Fonte.ehPriv(pasta)) br.ps2ponte.priv.Privilegio.caminho(pasta) else pasta
-            Regex("^/(?:mnt/media_rw|storage)/([^/]+)").find(c)?.groupValues?.get(1)
-        } ?: return null
-        if (id.equals("primary", true) || id == "emulated" || id == "self" || id.equals("home", true)) return null
-        return "/mnt/media_rw/$id"
-    }
+    /** Pasta de apoio no celular (sem permissão extra: é a pasta do próprio app). */
+    fun pastaApoio(ctx: Context, pasta: String): File =
+        File(ctx.getExternalFilesDir(null) ?: ctx.filesDir, "apoio/${Integer.toHexString(pasta.hashCode())}").apply { mkdirs() }
 
     /**
-     * Com root, tenta remontar o pendrive para gravação (mount -o remount,rw). Só funciona se o driver do
-     * sistema de arquivos do Android grava (ntfs3 grava; o ntfs-3g "ro" de alguns sistemas, não).
+     * A pasta como os servidores e as ferramentas devem vê-la: ela mesma, ou, se for só leitura, ela com a pasta
+     * de apoio por cima (capas, art.tar, CFG, VMC e games.bin gravados no celular; o PS2 vê tudo junto).
+     * Pode bloquear (root/Shizuku/SAF): não chame na thread principal.
      */
-    fun liberarGravacao(ctx: Context, pasta: String): String {
-        val mp = pontoDeMontagem(pasta) ?: throw IOException(ctx.getString(R.string.ft_liberar_sem_ponto))
-        val p = try {
-            Runtime.getRuntime().exec(arrayOf("su", "-c", "mount -o remount,rw $mp"))
-        } catch (e: IOException) {
-            throw IOException(ctx.getString(R.string.ft_liberar_sem_root))
-        }
-        val erros = StringBuilder()
-        val leitor = Thread { try { erros.append(p.errorStream.bufferedReader().readText()) } catch (_: Exception) {} }
-        leitor.start()
-        leitor.join(20_000)
-        val codigo = try { p.exitValue() } catch (e: IllegalArgumentException) { p.destroy(); -1 }
-        gravavelDe = null
-        val ok = gravavel(pasta, Fonte.raiz(ctx, pasta))
-        return when {
-            ok -> ctx.getString(R.string.ft_liberar_ok, mp)
-            else -> throw IOException(ctx.getString(R.string.ft_liberar_falhou, mp, erros.toString().trim().ifEmpty { "código $codigo" }))
-        }
+    fun raizDe(ctx: Context, pasta: String): VFile {
+        val r = Fonte.raiz(ctx, pasta)
+        if (gravavel(pasta, r)) return r
+        return Sobreposicao.raiz(r, LocalFile.root(pastaApoio(ctx, pasta)))
     }
 
-    /** A última pasta testada é só leitura. */
+    /** A última pasta testada é só leitura (e está usando a pasta de apoio). */
     val soLeitura get() = gravavelDe?.second == false
 
-    /** Para as ferramentas que gravam: falha logo, explicando, em vez de um "Read-only file system" no meio. */
-    fun exigirGravacao(ctx: Context, pasta: String, raiz: VFile) {
-        if (!gravavel(pasta, raiz)) throw IOException(ctx.getString(R.string.ft_so_leitura))
+    /** Mover ou compactar jogos precisa gravar no próprio pendrive (não dá para copiar 4 GB para o celular). */
+    fun exigirPendrive(ctx: Context) {
+        if (soLeitura) throw IOException(ctx.getString(R.string.ft_so_leitura_mover))
     }
 
     /** Organização que precisa de confirmação (conversões de PS1), achada pela rotina automática. */
@@ -229,7 +210,7 @@ object Ferramentas {
     fun depois(ctx: Context, pasta: String, raiz: VFile, mexeuNaArte: Boolean): String {
         val prefs = ctx.getSharedPreferences("ps2ponte", Context.MODE_PRIVATE)
         val c = atualizarCatalogo(ctx, pasta, raiz)
-        if (mexeuNaArte && prefs.getBoolean(PREF_AUTO_TAR, false) && c.tarDesatualizado && gravavel(pasta, raiz)) {
+        if (mexeuNaArte && prefs.getBoolean(PREF_AUTO_TAR, false) && c.tarDesatualizado) {
             val r = empacotarArt(ctx, raiz)
             atualizarCatalogo(ctx, pasta, raiz)
             return "\n" + ctx.getString(R.string.ft_auto_tar) + " " + r
@@ -297,7 +278,7 @@ object Ferramentas {
     }
 
     fun planejarOrganizacao(ctx: Context, pasta: String, raiz: VFile): Organizacao {
-        exigirGravacao(ctx, pasta, raiz)
+        exigirPendrive(ctx)
         val c = atualizarCatalogo(ctx, pasta, raiz)
         val ps2 = jogosDe(raiz, c.jogos.filter { !it.ps1 && it.foraDoLugar })
         return Organizacao(pasta, raiz, ps2, OrganizadorPs1(raiz).planejar(c, destinoPs1(ctx)))

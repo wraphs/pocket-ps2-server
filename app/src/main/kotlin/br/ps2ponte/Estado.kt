@@ -34,10 +34,17 @@ object Estado {
         ctx = c.applicationContext
     }
 
-    fun log(msg: String) {
-        synchronized(linhas) {
-            linhas.addLast("${hora.format(Date())}  $msg")
-            while (linhas.size > 500) linhas.removeFirst()
+    /** Log da aba Jogos (ferramentas), separado do log do servidor. */
+    private val linhasJogos = ArrayDeque<String>()
+
+    fun log(msg: String) = acrescentar(linhas, msg)
+
+    fun logJogos(msg: String) = acrescentar(linhasJogos, msg)
+
+    private fun acrescentar(l: ArrayDeque<String>, msg: String) {
+        synchronized(l) {
+            l.addLast("${hora.format(Date())}  $msg")
+            while (l.size > 500) l.removeFirst()
         }
         avisar()
     }
@@ -47,7 +54,14 @@ object Estado {
         avisar()
     }
 
+    fun limparJogos() {
+        synchronized(linhasJogos) { linhasJogos.clear() }
+        avisar()
+    }
+
     fun texto(): String = synchronized(linhas) { linhas.joinToString("\n") }
+
+    fun textoJogos(): String = synchronized(linhasJogos) { linhasJogos.joinToString("\n") }
 
     fun avisar() = ouvintes.forEach { it() }
     fun ouvir(f: () -> Unit) = ouvintes.add(f)

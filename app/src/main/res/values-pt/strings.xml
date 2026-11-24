@@ -222,7 +222,7 @@ RiptOPL com SMB2: mesma porta e mesmo compartilhamento; qualquer usuário e senh
     <string name="ft_converter_apagar">Converter e apagar originais</string>
     <string name="ft_org_ps2">• %1$d jogo(s) de PS2 → DVD/ ou CD/</string>
     <string name="ft_org_conversao">🔄 %1$d conversão(ões), %2$.1f GB para processar. Pode levar alguns minutos.</string>
-    <string name="ft_so_leitura">🔒 A pasta está só para leitura (pendrive em NTFS costuma ser assim no Android, até com root). O PS2 lê os jogos normalmente, mas o app não consegue gravar capas, art.tar, compactar nem organizar. Para isso, formate o pendrive em exFAT no PC ou use a memória interna.</string>
+    <string name="ft_so_leitura">🔒 Pendrive só leitura (o Android monta NTFS assim). Capas, art.tar, configurações do OPL e saves (VMC) vão para uma pasta de apoio no celular, e o PS2 e esta aba veem tudo junto. Mover, compactar e converter jogos precisa de um pendrive em exFAT.</string>
     <string name="jg_buscar">Buscar jogo…</string>
     <string name="jg_ferramentas">Ferramentas</string>
     <string name="jg_nenhum">Nenhum jogo encontrado. Copie .iso (PS2) ou .VCD/.cue (PS1) para a pasta e toque em ⚙ › Atualizar.</string>
@@ -237,10 +237,8 @@ RiptOPL com SMB2: mesma porta e mesmo compartilhamento; qualquer usuário e senh
     <string name="est_mini">Mini: o mais denso, capas pequenas</string>
     <string name="est_lista">Lista: compacto, jogos em lista</string>
     <string name="est_classico">Clássico: o visual anterior</string>
-    <string name="ft_btn_liberar">Tentar liberar gravação (root)</string>
-    <string name="ft_liberar_ajuda">Com root, o app pode tentar remontar o pendrive para gravação (mount -o remount,rw). Só funciona se o Android tiver um driver de NTFS que grava; se não der, o app avisa e nada muda. Faça backup antes: gravar em NTFS pelo Android é menos testado que em exFAT.</string>
-    <string name="ft_liberar_ok">Gravação liberada em %1$s. As ferramentas já podem gravar (até desconectar o pendrive).</string>
-    <string name="ft_liberar_falhou">o Android não deixou gravar em %1$s (%2$s). Formate em exFAT no PC ou use a memória interna.</string>
-    <string name="ft_liberar_sem_root">este celular não tem root (su não encontrado)</string>
-    <string name="ft_liberar_sem_ponto">esta pasta não está num pendrive</string>
+    <string name="ft_so_leitura_mover">o pendrive é só leitura (NTFS no Android): mover, compactar e converter jogos precisa gravar nele. Formate em exFAT no PC (copie os jogos antes) ou use a memória interna.</string>
+    <string name="ft_apoio_onde">Pasta de apoio: %1$s (some se o app for desinstalado).</string>
+    <string name="jg_log">Log dos jogos</string>
+    <string name="jg_log_vazio">Nada por aqui ainda.</string>
 </resources>
