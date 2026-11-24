@@ -156,6 +156,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         prefs = getSharedPreferences("ps2ponte", MODE_PRIVATE)
         usb = getSystemService(Context.USB_SERVICE) as UsbManager
+        estilo = estilos.firstOrNull { it.id == prefs.getString("estilo", "compacto") } ?: estilos.first()
         setContentView(montarTela())
 
         Compat.registrar(this, receptorPermissao, IntentFilter(ACAO_PERMISSAO_USB), exportado = false)
@@ -199,11 +200,26 @@ class MainActivity : Activity() {
 
     // ------------------------------------------------------------------ tela
 
-    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+    /**
+     * Aparência experimental, trocada pelo 🎨: [escala] dos espaços, [texto] dos textos, [reto] = botões planos
+     * de canto pequeno (em vez dos do sistema), [coluna] da grade de jogos (dp) e [lista] = jogos em lista.
+     */
+    private class Estilo(val id: String, val nome: Int, val escala: Float, val texto: Float, val reto: Boolean, val coluna: Int, val lista: Boolean)
+
+    private val estilos = listOf(
+        Estilo("compacto", R.string.est_compacto, 0.85f, 0.92f, true, 90, false),
+        Estilo("mini", R.string.est_mini, 0.72f, 0.84f, true, 74, false),
+        Estilo("lista", R.string.est_lista, 0.85f, 0.92f, true, 90, true),
+        Estilo("classico", R.string.est_classico, 1f, 1f, false, 104, false),
+    )
+    private lateinit var estilo: Estilo
+
+    private fun dp(v: Int) = (v * resources.displayMetrics.density * estilo.escala).toInt()
+    private fun tam(sp: Float) = sp * estilo.texto
 
     private fun texto(t: String = "", tamanho: Float = 15f) = TextView(this).apply {
         text = t
-        textSize = tamanho
+        textSize = tam(tamanho)
         setPadding(0, dp(2), 0, dp(2))
     }
 
@@ -211,12 +227,43 @@ class MainActivity : Activity() {
         text = t
         isAllCaps = false
         setOnClickListener { acao() }
+        if (estilo.reto) {
+            // Plano, canto pequeno, sem a altura mínima de 48dp do tema
+            background = fundoBotao()
+            stateListAnimator = null
+            minHeight = 0; minimumHeight = 0; minWidth = 0; minimumWidth = 0
+            setPadding(dp(12), dp(9), dp(12), dp(9))
+            textSize = tam(14f)
+        }
+    }
+
+    private fun fundoBotao(): android.graphics.drawable.Drawable {
+        fun cor(c: Int) = GradientDrawable().apply { cornerRadius = dp(5).toFloat(); setColor(c) }
+        return android.graphics.drawable.StateListDrawable().apply {
+            addState(intArrayOf(android.R.attr.state_pressed), cor(0x4D808080))
+            addState(intArrayOf(-android.R.attr.state_enabled), cor(0x12808080))
+            addState(intArrayOf(), cor(0x29808080))
+        }.also { (it as android.graphics.drawable.StateListDrawable).let { s -> s.setEnterFadeDuration(80) } }
     }
 
     /** Fundo arredondado, translúcido: funciona no tema claro e no escuro. */
     private fun fundoCartao(cor: Int) = GradientDrawable().apply {
-        cornerRadius = dp(14).toFloat()
+        cornerRadius = dp(if (estilo.reto) 8 else 14).toFloat()
         setColor(cor)
+    }
+
+    /** Escolha da aparência; a tela é refeita na hora para comparar. */
+    private fun escolherEstilo() {
+        val nomes = estilos.map { getString(it.nome) }.toTypedArray()
+        AlertDialog.Builder(this).setTitle(R.string.est_titulo)
+            .setSingleChoiceItems(nomes, estilos.indexOf(estilo)) { d, i ->
+                d.dismiss()
+                if (estilos[i] != estilo) {
+                    prefs.edit().putString("estilo", estilos[i].id).apply()
+                    recreate()
+                }
+            }
+            .setNegativeButton(R.string.cancelar, null).show()
     }
 
     private fun cartao(pai: LinearLayout): LinearLayout = LinearLayout(this).apply {
@@ -233,7 +280,7 @@ class MainActivity : Activity() {
     /** Botãozinho "ⓘ" que abre uma explicação. [conteudo] é calculado na hora (usa o IP atual). */
     private fun info(titulo: String, conteudo: () -> String) = TextView(this).apply {
         text = "ⓘ"
-        textSize = 20f
+        textSize = tam(20f)
         setPadding(dp(12), dp(4), dp(12), dp(4))
         contentDescription = getString(R.string.ajuda, titulo)
         setOnClickListener { dialogo(titulo, conteudo()) }
@@ -250,7 +297,7 @@ class MainActivity : Activity() {
     private fun titulo(t: String, ajudaTitulo: String? = null, ajuda: (() -> String)? = null): View {
         val tv = TextView(this).apply {
             text = t
-            textSize = 18f
+            textSize = tam(17f)
             setTypeface(typeface, Typeface.BOLD)
         }
         return if (ajuda != null) linha(tv, info(ajudaTitulo ?: t, ajuda)) else tv
@@ -268,7 +315,8 @@ class MainActivity : Activity() {
         abaFerramentas = montarJogos()
         btnAbaServidor = botao(getString(R.string.aba_servidor)) { mostrarAba(false) }
         btnAbaFerramentas = botao(getString(R.string.aba_ferramentas)) { mostrarAba(true) }
-        for (b in listOf(btnAbaServidor, btnAbaFerramentas)) barra.addView(b, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        for (b in listOf(btnAbaServidor, btnAbaFerramentas)) barra.addView(b, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) })
+        barra.addView(botao("🎨") { escolherEstilo() }.apply { contentDescription = getString(R.string.est_titulo) })
         tela.addView(barra)
         val corpo = android.widget.FrameLayout(this)
         corpo.addView(abaServidor)
@@ -299,11 +347,10 @@ class MainActivity : Activity() {
         cartaoStatus = cartao(raiz)
         tvStatusTitulo = texto(tamanho = 20f).apply { setTypeface(typeface, Typeface.BOLD) }.also { cartaoStatus.addView(it) }
         tvStatusDetalhe = texto(tamanho = 14f).also { cartaoStatus.addView(it) }
-        btnIniciar = Button(this).apply {
-            textSize = 20f
-            isAllCaps = false
+        btnIniciar = botao("") { iniciarOuParar() }.apply {
+            textSize = tam(19f)
+            setTypeface(typeface, Typeface.BOLD)
             setPadding(0, dp(14), 0, dp(14))
-            setOnClickListener { iniciarOuParar() }
         }
         cartaoStatus.addView(btnIniciar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
 
@@ -458,11 +505,14 @@ class MainActivity : Activity() {
         tvTarefaDetalhe = texto(tamanho = 13f).also { cartaoTarefa.addView(it) }
         cartaoTarefa.addView(botao(getString(R.string.cancelar)) { Ferramentas.cancelar() })
 
-        tvResumo = texto(tamanho = 13f).apply { setPadding(0, dp(8), 0, 0) }.also { topo.addView(it) }
+        tvResumo = texto(tamanho = 13f).apply {
+            setPadding(0, dp(8), 0, 0)
+            setOnClickListener { if (Ferramentas.soLeitura) mostrarSoLeitura() }
+        }.also { topo.addView(it) }
         val busca = EditText(this).apply {
             hint = getString(R.string.jg_buscar)
             setSingleLine()
-            textSize = 15f
+            textSize = tam(15f)
             addTextChangedListener(object : android.text.TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                 override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
@@ -472,13 +522,26 @@ class MainActivity : Activity() {
         topo.addView(linha(busca, botao("⚙") { abrirFerramentas() }.apply { contentDescription = getString(R.string.jg_ferramentas) }))
         tela.addView(topo)
 
-        grade = GradeJogos(this) { detalhesJogo(it) }
+        grade = GradeJogos(this, estilo.escala, estilo.texto, estilo.coluna, estilo.lista) { detalhesJogo(it) }
         tvVazio = texto(tamanho = 15f).apply { gravity = Gravity.CENTER; setPadding(dp(24), dp(32), dp(24), dp(32)) }
         val corpo = android.widget.FrameLayout(this)
         corpo.addView(grade.view)
         corpo.addView(tvVazio, android.widget.FrameLayout.LayoutParams(-1, -2))
         tela.addView(corpo, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         return tela
+    }
+
+    /** Pasta só leitura: explica e, com root, oferece remontar o pendrive para gravação. */
+    private fun mostrarSoLeitura() {
+        val pasta = pastaSalva() ?: return
+        val b = AlertDialog.Builder(this).setTitle("🔒").setMessage(getString(R.string.ft_so_leitura) + "\n\n" + getString(R.string.ft_liberar_ajuda))
+            .setNegativeButton(R.string.btn_fechar_escolha, null)
+        if (Ferramentas.pontoDeMontagem(pasta) != null) {
+            b.setPositiveButton(R.string.ft_btn_liberar) { _, _ ->
+                Ferramentas.rodar(this, getString(R.string.ft_btn_liberar)) { Ferramentas.liberarGravacao(this, pasta) }
+            }
+        }
+        b.show()
     }
 
     /** Janela com as ferramentas (organizar, capas, compactar, PS1, verificar). */

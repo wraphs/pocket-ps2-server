@@ -170,11 +170,48 @@ object Ferramentas {
             teste.open(true).close()
             teste.delete()
             true
-        } catch (e: IOException) {
+        } catch (e: Exception) {
+            // Qualquer falha (E/S, provedor do SAF, root) conta como "não grava"
             false
         }
         gravavelDe = pasta to ok
         return ok
+    }
+
+    /** Ponto de montagem do pendrive da pasta (/mnt/media_rw/<id>); null na memória interna. */
+    fun pontoDeMontagem(pasta: String): String? {
+        val id = if (Fonte.ehSaf(pasta)) {
+            try { android.provider.DocumentsContract.getTreeDocumentId(android.net.Uri.parse(pasta)).substringBefore(':') } catch (e: Exception) { null }
+        } else {
+            val c = if (Fonte.ehPriv(pasta)) br.ps2ponte.priv.Privilegio.caminho(pasta) else pasta
+            Regex("^/(?:mnt/media_rw|storage)/([^/]+)").find(c)?.groupValues?.get(1)
+        } ?: return null
+        if (id.equals("primary", true) || id == "emulated" || id == "self" || id.equals("home", true)) return null
+        return "/mnt/media_rw/$id"
+    }
+
+    /**
+     * Com root, tenta remontar o pendrive para gravação (mount -o remount,rw). Só funciona se o driver do
+     * sistema de arquivos do Android grava (ntfs3 grava; o ntfs-3g "ro" de alguns sistemas, não).
+     */
+    fun liberarGravacao(ctx: Context, pasta: String): String {
+        val mp = pontoDeMontagem(pasta) ?: throw IOException(ctx.getString(R.string.ft_liberar_sem_ponto))
+        val p = try {
+            Runtime.getRuntime().exec(arrayOf("su", "-c", "mount -o remount,rw $mp"))
+        } catch (e: IOException) {
+            throw IOException(ctx.getString(R.string.ft_liberar_sem_root))
+        }
+        val erros = StringBuilder()
+        val leitor = Thread { try { erros.append(p.errorStream.bufferedReader().readText()) } catch (_: Exception) {} }
+        leitor.start()
+        leitor.join(20_000)
+        val codigo = try { p.exitValue() } catch (e: IllegalArgumentException) { p.destroy(); -1 }
+        gravavelDe = null
+        val ok = gravavel(pasta, Fonte.raiz(ctx, pasta))
+        return when {
+            ok -> ctx.getString(R.string.ft_liberar_ok, mp)
+            else -> throw IOException(ctx.getString(R.string.ft_liberar_falhou, mp, erros.toString().trim().ifEmpty { "código $codigo" }))
+        }
     }
 
     /** A última pasta testada é só leitura. */

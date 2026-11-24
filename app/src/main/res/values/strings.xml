@@ -233,4 +233,15 @@ RiptOPL with SMB2: same port and share; any user and password. The app answers S
     <string name="jg_compactar">Compress (ZSO)</string>
     <string name="jg_descompactar">Decompress (ISO)</string>
     <string name="jg_baixar_capa">Download cover</string>
+    <string name="est_titulo">Look (experimental)</string>
+    <string name="est_compacto">Compact: smaller, flat buttons</string>
+    <string name="est_mini">Mini: densest, small covers</string>
+    <string name="est_lista">List: compact, games as a list</string>
+    <string name="est_classico">Classic: the previous look</string>
+    <string name="ft_btn_liberar">Try to enable writing (root)</string>
+    <string name="ft_liberar_ajuda">With root, the app can try to remount the drive for writing (mount -o remount,rw). It only works if Android has an NTFS driver that can write; if not, the app tells you and nothing changes. Back up first: writing NTFS from Android is less tested than exFAT.</string>
+    <string name="ft_liberar_ok">Writing enabled on %1$s. The tools can write now (until the drive is unplugged).</string>
+    <string name="ft_liberar_falhou">Android would not allow writing on %1$s (%2$s). Format it as exFAT on a PC or use internal storage.</string>
+    <string name="ft_liberar_sem_root">this phone isn\'t rooted (su not found)</string>
+    <string name="ft_liberar_sem_ponto">this folder isn\'t on a USB drive</string>
 </resources>

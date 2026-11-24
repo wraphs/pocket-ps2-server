@@ -224,6 +224,10 @@ class SafFile internal constructor(
                 val uri = DocumentsContract.createDocument(raiz.resolver, raiz.docUri(pai), "application/octet-stream", name)
                     ?: throw IOException("não consegui criar $path")
                 docId = DocumentsContract.getDocumentId(uri)
+            } catch (e: RuntimeException) {
+                // O provedor (ExternalStorageProvider) lança IllegalStateException("Failed to touch …: Read-only
+                // file system") pelo Binder: vira erro de E/S comum para quem chama
+                throw IOException(e.message ?: e.javaClass.simpleName, e)
             } finally {
                 raiz.mudou()
             }

@@ -232,4 +232,15 @@ RiptOPL com SMB2: mesma porta e mesmo compartilhamento; qualquer usuário e senh
     <string name="jg_compactar">Compactar (ZSO)</string>
     <string name="jg_descompactar">Descompactar (ISO)</string>
     <string name="jg_baixar_capa">Baixar capa</string>
+    <string name="est_titulo">Aparência (experimental)</string>
+    <string name="est_compacto">Compacto: menor, botões retos</string>
+    <string name="est_mini">Mini: o mais denso, capas pequenas</string>
+    <string name="est_lista">Lista: compacto, jogos em lista</string>
+    <string name="est_classico">Clássico: o visual anterior</string>
+    <string name="ft_btn_liberar">Tentar liberar gravação (root)</string>
+    <string name="ft_liberar_ajuda">Com root, o app pode tentar remontar o pendrive para gravação (mount -o remount,rw). Só funciona se o Android tiver um driver de NTFS que grava; se não der, o app avisa e nada muda. Faça backup antes: gravar em NTFS pelo Android é menos testado que em exFAT.</string>
+    <string name="ft_liberar_ok">Gravação liberada em %1$s. As ferramentas já podem gravar (até desconectar o pendrive).</string>
+    <string name="ft_liberar_falhou">o Android não deixou gravar em %1$s (%2$s). Formate em exFAT no PC ou use a memória interna.</string>
+    <string name="ft_liberar_sem_root">este celular não tem root (su não encontrado)</string>
+    <string name="ft_liberar_sem_ponto">esta pasta não está num pendrive</string>
 </resources>

@@ -28,7 +28,15 @@ import java.util.concurrent.Executors
  * As capas vêm de ART/ (o mesmo nome que o loader usa), carregadas numa thread e reduzidas ao tamanho da
  * célula, com cache limitado a 1/8 da memória do app: leve mesmo em celular fraco.
  */
-class GradeJogos(private val act: Activity, private val aoTocar: (Catalogo.Item) -> Unit) {
+class GradeJogos(
+    private val act: Activity,
+    /** Estilo da tela (ver MainActivity.Estilo): escala dos tamanhos, do texto, largura da coluna e modo lista. */
+    private val escala: Float = 1f,
+    private val texto: Float = 1f,
+    private val colunaDp: Int = 104,
+    private val lista: Boolean = false,
+    private val aoTocar: (Catalogo.Item) -> Unit,
+) {
     val view: GridView
     private val adaptador = Adaptador()
     private var itens: List<Catalogo.Item> = emptyList()
@@ -49,15 +57,20 @@ class GradeJogos(private val act: Activity, private val aoTocar: (Catalogo.Item)
     private var arte: Map<String, VFile> = emptyMap()
     private var arteDe: Catalogo? = null
 
-    private fun dp(v: Int) = (v * act.resources.displayMetrics.density).toInt()
+    private fun dp(v: Int) = (v * act.resources.displayMetrics.density * escala).toInt()
 
     init {
         view = GridView(act).apply {
-            numColumns = GridView.AUTO_FIT
-            columnWidth = dp(104)
-            stretchMode = GridView.STRETCH_COLUMN_WIDTH
-            horizontalSpacing = dp(10)
-            verticalSpacing = dp(14)
+            if (lista) {
+                numColumns = 1
+                verticalSpacing = dp(6)
+            } else {
+                numColumns = GridView.AUTO_FIT
+                columnWidth = dp(colunaDp)
+                stretchMode = GridView.STRETCH_COLUMN_WIDTH
+                horizontalSpacing = dp(10)
+                verticalSpacing = dp(14)
+            }
             setPadding(dp(12), dp(8), dp(12), dp(24))
             clipToPadding = false
             adapter = adaptador
@@ -148,7 +161,7 @@ class GradeJogos(private val act: Activity, private val aoTocar: (Catalogo.Item)
         }
     }
 
-    private class Celula(val moldura: Moldura, val img: ImageView, val vazio: TextView, val selo: TextView, val nome: TextView)
+    private class Celula(val moldura: Moldura, val img: ImageView, val vazio: TextView, val selo: TextView, val nome: TextView, val info: TextView?)
 
     private inner class Adaptador : BaseAdapter() {
         override fun getCount() = itens.size
@@ -161,7 +174,12 @@ class GradeJogos(private val act: Activity, private val aoTocar: (Catalogo.Item)
             val i = itens[pos]
             c.moldura.proporcao = if (i.ps1) 1f else 200f / 140f
             c.nome.text = titulo(i)
-            c.vazio.text = titulo(i)
+            c.vazio.text = if (lista) "" else titulo(i)
+            c.info?.text = listOfNotNull(
+                when (i.tipo) { Catalogo.Tipo.PS2 -> if (i.compactado) "PS2 · ZSO" else "PS2"; Catalogo.Tipo.VCD -> "PS1 · POPS"; Catalogo.Tipo.CUE -> "PS1 · Ember" },
+                i.id,
+                "${i.tamanho / (1024 * 1024)} MiB",
+            ).joinToString(" · ")
             c.selo.text = when {
                 i.foraDoLugar -> "📁"
                 i.tipo == Catalogo.Tipo.VCD -> "PS1"
@@ -169,9 +187,10 @@ class GradeJogos(private val act: Activity, private val aoTocar: (Catalogo.Item)
                 i.compactado -> "ZSO"
                 else -> ""
             }
-            c.selo.visibility = if (c.selo.text.isEmpty()) View.GONE else View.VISIBLE
+            c.selo.visibility = if (c.selo.text.isEmpty() || lista) View.GONE else View.VISIBLE
+            if (lista && i.foraDoLugar) c.info?.text = "📁 " + c.info?.text
             c.moldura.requestLayout()
-            val largura = (parent as GridView).columnWidth.takeIf { it > 0 } ?: dp(104)
+            val largura = if (lista) dp(48) else (parent as GridView).columnWidth.takeIf { it > 0 } ?: dp(colunaDp)
             // O nome fica por baixo da imagem: aparece enquanto a capa carrega ou se ela não existir
             capa(i, c.img, largura)
             return v
@@ -185,12 +204,12 @@ class GradeJogos(private val act: Activity, private val aoTocar: (Catalogo.Item)
             val vazio = TextView(act).apply {
                 gravity = Gravity.CENTER
                 setPadding(dp(6), dp(6), dp(6), dp(6))
-                textSize = 12f
+                textSize = 12f * texto
                 alpha = 0.7f
             }
             val img = ImageView(act).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
             val selo = TextView(act).apply {
-                textSize = 10f
+                textSize = 10f * texto
                 setTextColor(Color.WHITE)
                 setTypeface(typeface, Typeface.BOLD)
                 setPadding(dp(5), dp(1), dp(5), dp(1))
@@ -200,15 +219,31 @@ class GradeJogos(private val act: Activity, private val aoTocar: (Catalogo.Item)
             moldura.addView(img, FrameLayout.LayoutParams(-1, -1))
             moldura.addView(selo, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START).apply { setMargins(dp(4), dp(4), 0, 0) })
             val nome = TextView(act).apply {
-                textSize = 12f
+                textSize = (if (lista) 14f else 12f) * texto
                 maxLines = 2
                 ellipsize = TextUtils.TruncateAt.END
-                gravity = Gravity.CENTER_HORIZONTAL
+                gravity = if (lista) Gravity.START else Gravity.CENTER_HORIZONTAL
                 setPadding(0, dp(4), 0, 0)
+            }
+            if (lista) {
+                // Linha: capinha pequena à esquerda, nome e detalhes ao lado
+                raiz.orientation = LinearLayout.HORIZONTAL
+                raiz.gravity = Gravity.CENTER_VERTICAL
+                val info = TextView(act).apply { textSize = 12f * texto; alpha = 0.7f; maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
+                val textos = LinearLayout(act).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dp(12), 0, 0, 0)
+                    addView(nome)
+                    addView(info)
+                }
+                raiz.addView(moldura, LinearLayout.LayoutParams(dp(48), -2))
+                raiz.addView(textos, LinearLayout.LayoutParams(0, -2, 1f))
+                raiz.tag = Celula(moldura, img, vazio, selo, nome, info)
+                return raiz
             }
             raiz.addView(moldura, LinearLayout.LayoutParams(-1, -2))
             raiz.addView(nome, LinearLayout.LayoutParams(-1, -2))
-            raiz.tag = Celula(moldura, img, vazio, selo, nome)
+            raiz.tag = Celula(moldura, img, vazio, selo, nome, null)
             return raiz
         }
     }
