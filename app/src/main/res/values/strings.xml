@@ -138,7 +138,7 @@ RiptOPL with SMB2: same port and share; any user and password. The app answers S
     <string name="dica_outra_rede">⚠ The PS2 (%1$s) is not on the cable network (%2$s). Its IP should look like %3$s; replies may go out through Wi-Fi.</string>
     <string name="dica_bateria">⚠ Android may pause the server with the screen off. Tap \"Let it run in the background\".</string>
     <string name="aba_servidor">▶ Server</string>
-    <string name="aba_ferramentas">🧰 Tools</string>
+    <string name="aba_ferramentas">🎮 Games</string>
     <string name="sec_avancado">⚙ Advanced</string>
     <string name="av_modo">Where the games come from:</string>
     <string name="btn_trocar_pasta">Change folder…</string>
@@ -148,7 +148,6 @@ RiptOPL with SMB2: same port and share; any user and password. The app answers S
     <string name="ft_sec_pasta">OPL folder</string>
     <string name="ft_ajuda_pasta">The game list updates by itself every time you open the app: it looks for PS2 (.iso, .zso, .cso) and PS1 (.VCD and .cue) games in the whole folder and reads each game code. Only new or changed files are read again.\n\nOrganize: creates the OPL folders, moves PS2 games into DVD/ (over 700 MB) or CD/ and PS1 games into POPS/ or EMBER/games/, setting up multi-disc. It shows everything before doing it.</string>
     <string name="ft_sem_pasta_escolhida">Choose the games folder on the Server tab.</string>
-    <string name="ft_btn_ver">Show games</string>
     <string name="ft_btn_organizar">Organize the folder</string>
     <string name="ft_sec_capas">Covers</string>
     <string name="ft_ajuda_capas">Download: looks up the cover of each game without one by its code (xlenore/ps2-covers database, needs internet on the phone) and saves it as ART/&lt;code>_COV.png.\n\nConvert: turns JPG/WebP/BMP/PNG in the ART folder into 8-bit PNG (256 colors), the format OPL and RiptOPL read without errors and load faster.\n\nSize: 140×200 is the OPL standard; 280×400 is the RiptOPL standard.</string>
@@ -225,4 +224,13 @@ RiptOPL with SMB2: same port and share; any user and password. The app answers S
     <string name="ft_org_ps2">• %1$d PS2 game(s) → DVD/ or CD/</string>
     <string name="ft_org_conversao">🔄 %1$d conversion(s), %2$.1f GB to process. It may take a few minutes.</string>
     <string name="ft_so_leitura">🔒 The folder is read-only (NTFS drives usually are on Android, even with root). The PS2 reads the games normally, but the app cannot write covers, art.tar, compress or organize. For that, format the drive as exFAT on a PC or use internal storage.</string>
+    <string name="jg_buscar">Search games…</string>
+    <string name="jg_ferramentas">Tools</string>
+    <string name="jg_nenhum">No games found. Copy .iso (PS2) or .VCD/.cue (PS1) files to the folder and tap ⚙ › Refresh.</string>
+    <string name="jg_codigo">Code: %1$s</string>
+    <string name="jg_fora_lugar">📁 Misplaced: the PS2 cannot see this game. Use Organize.</string>
+    <string name="jg_sem_capa">No cover.</string>
+    <string name="jg_compactar">Compress (ZSO)</string>
+    <string name="jg_descompactar">Decompress (ISO)</string>
+    <string name="jg_baixar_capa">Download cover</string>
 </resources>

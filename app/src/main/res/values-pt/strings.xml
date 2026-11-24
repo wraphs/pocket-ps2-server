@@ -137,7 +137,7 @@ RiptOPL com SMB2: mesma porta e mesmo compartilhamento; qualquer usuário e senh
     <string name="dica_outra_rede">⚠ O PS2 (%1$s) não está na rede do cabo (%2$s). O IP dele deveria ser parecido com %3$s; as respostas podem sair pelo Wi-Fi.</string>
     <string name="dica_bateria">⚠ O Android pode pausar o servidor com a tela apagada. Toque em \"Deixar rodar em segundo plano\".</string>
     <string name="aba_servidor">▶ Servidor</string>
-    <string name="aba_ferramentas">🧰 Ferramentas</string>
+    <string name="aba_ferramentas">🎮 Jogos</string>
     <string name="sec_avancado">⚙ Avançado</string>
     <string name="av_modo">De onde vêm os jogos:</string>
     <string name="btn_trocar_pasta">Trocar a pasta…</string>
@@ -147,7 +147,6 @@ RiptOPL com SMB2: mesma porta e mesmo compartilhamento; qualquer usuário e senh
     <string name="ft_sec_pasta">Pasta do OPL</string>
     <string name="ft_ajuda_pasta">A lista de jogos se atualiza sozinha toda vez que você abre o app: procura PS2 (.iso, .zso, .cso) e PS1 (.VCD e .cue) na pasta inteira e lê o código de cada jogo. Só arquivos novos ou alterados são lidos de novo.\n\nOrganizar: cria as pastas do OPL, leva os jogos de PS2 para DVD/ (mais de 700 MB) ou CD/ e os de PS1 para POPS/ ou EMBER/games/, arrumando o multidisco. Mostra tudo antes de fazer.</string>
     <string name="ft_sem_pasta_escolhida">Escolha a pasta dos jogos na aba Servidor.</string>
-    <string name="ft_btn_ver">Ver jogos</string>
     <string name="ft_btn_organizar">Organizar a pasta</string>
     <string name="ft_sec_capas">Capas</string>
     <string name="ft_ajuda_capas">Baixar: procura a capa de cada jogo sem capa pelo código (banco xlenore/ps2-covers, precisa de internet no celular) e grava em ART/&lt;código>_COV.png.\n\nConverter: transforma JPG/WebP/BMP/PNG da pasta ART em PNG de 8 bits (256 cores), o formato que o OPL e o RiptOPL leem sem erro e que carrega mais rápido.\n\nTamanho: 140×200 é o padrão do OPL; 280×400 é o padrão do RiptOPL.</string>
@@ -224,4 +223,13 @@ RiptOPL com SMB2: mesma porta e mesmo compartilhamento; qualquer usuário e senh
     <string name="ft_org_ps2">• %1$d jogo(s) de PS2 → DVD/ ou CD/</string>
     <string name="ft_org_conversao">🔄 %1$d conversão(ões), %2$.1f GB para processar. Pode levar alguns minutos.</string>
     <string name="ft_so_leitura">🔒 A pasta está só para leitura (pendrive em NTFS costuma ser assim no Android, até com root). O PS2 lê os jogos normalmente, mas o app não consegue gravar capas, art.tar, compactar nem organizar. Para isso, formate o pendrive em exFAT no PC ou use a memória interna.</string>
+    <string name="jg_buscar">Buscar jogo…</string>
+    <string name="jg_ferramentas">Ferramentas</string>
+    <string name="jg_nenhum">Nenhum jogo encontrado. Copie .iso (PS2) ou .VCD/.cue (PS1) para a pasta e toque em ⚙ › Atualizar.</string>
+    <string name="jg_codigo">Código: %1$s</string>
+    <string name="jg_fora_lugar">📁 Fora do lugar: o PS2 não vê este jogo. Use Organizar.</string>
+    <string name="jg_sem_capa">Sem capa.</string>
+    <string name="jg_compactar">Compactar (ZSO)</string>
+    <string name="jg_descompactar">Descompactar (ISO)</string>
+    <string name="jg_baixar_capa">Baixar capa</string>
 </resources>

@@ -301,10 +301,10 @@ object Ferramentas {
      * Baixa as capas que faltam (bancos xlenore/ps2-covers e psx-covers) e grava como PNG 8 bits com o nome que
      * cada loader procura: ART/<código>_COV.png (PS2), ART/<nome do VCD>_COV.png (POPS), ART/<pasta>_COV.png (Ember).
      */
-    fun baixarCapas(ctx: Context, pasta: String, raiz: VFile, maxL: Int, maxA: Int): String {
+    fun baixarCapas(ctx: Context, pasta: String, raiz: VFile, maxL: Int, maxA: Int, so: String? = null): String {
         val art = pasta(raiz, "ART") ?: raiz.child("ART").also { it.mkdirs() }
         val existentes = arquivosArt(raiz).map { it.name.uppercase() }.toHashSet()
-        val lista = atualizarCatalogo(ctx, pasta, raiz).jogos.filter { !it.foraDoLugar }
+        val lista = atualizarCatalogo(ctx, pasta, raiz).jogos.filter { !it.foraDoLugar && (so == null || it.rel == so) }
         var baixadas = 0
         var semId = 0
         val naoAchadas = mutableListOf<String>()

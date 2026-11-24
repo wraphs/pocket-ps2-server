@@ -28,6 +28,7 @@ import android.provider.Settings
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
@@ -96,6 +97,9 @@ class MainActivity : Activity() {
     private lateinit var tvTarefaDetalhe: TextView
     private lateinit var tvFtPasta: TextView
     private lateinit var tvResumo: TextView
+    private lateinit var painelFerramentas: View
+    private lateinit var grade: GradeJogos
+    private lateinit var tvVazio: TextView
     private val botoesFt = mutableListOf<Button>()
 
     private val handler = Handler(Looper.getMainLooper())
@@ -189,6 +193,7 @@ class MainActivity : Activity() {
         unregisterReceiver(receptorUsb)
         if (Build.VERSION.SDK_INT >= 23) try { Shizuku.removeRequestPermissionResultListener(ouvinteShizuku) } catch (_: Throwable) {}
         fundo.shutdown()
+        if (::grade.isInitialized) grade.fechar()
         super.onDestroy()
     }
 
@@ -259,7 +264,8 @@ class MainActivity : Activity() {
             setPadding(dp(14), dp(6), dp(14), 0)
         }
         abaServidor = ScrollView(this).apply { addView(montarServidor()) }
-        abaFerramentas = ScrollView(this).apply { addView(montarFerramentas()) }
+        painelFerramentas = ScrollView(this).apply { addView(montarFerramentas()) }
+        abaFerramentas = montarJogos()
         btnAbaServidor = botao(getString(R.string.aba_servidor)) { mostrarAba(false) }
         btnAbaFerramentas = botao(getString(R.string.aba_ferramentas)) { mostrarAba(true) }
         for (b in listOf(btnAbaServidor, btnAbaFerramentas)) barra.addView(b, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
@@ -435,25 +441,112 @@ class MainActivity : Activity() {
 
     // ------------------------------------------------------------------ aba Ferramentas
 
-    private fun montarFerramentas(): View {
-        val raiz = LinearLayout(this).apply {
+    /**
+     * Aba "Jogos": resumo, progresso da tarefa, busca e a grade de capas. As ferramentas ficam na janela do ⚙.
+     */
+    private fun montarJogos(): View {
+        val tela = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val topo = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(4), dp(14), dp(32))
+            setPadding(dp(14), 0, dp(14), 0)
         }
-
         // Tarefa em andamento
-        cartaoTarefa = cartao(raiz)
+        cartaoTarefa = cartao(topo)
         tvTarefa = texto(tamanho = 16f).apply { setTypeface(typeface, Typeface.BOLD) }.also { cartaoTarefa.addView(it) }
         barraTarefa = android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 1000 }
         cartaoTarefa.addView(barraTarefa, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         tvTarefaDetalhe = texto(tamanho = 13f).also { cartaoTarefa.addView(it) }
         cartaoTarefa.addView(botao(getString(R.string.cancelar)) { Ferramentas.cancelar() })
 
+        tvResumo = texto(tamanho = 13f).apply { setPadding(0, dp(8), 0, 0) }.also { topo.addView(it) }
+        val busca = EditText(this).apply {
+            hint = getString(R.string.jg_buscar)
+            setSingleLine()
+            textSize = 15f
+            addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun afterTextChanged(s: android.text.Editable?) { grade.filtrar(s?.toString().orEmpty()); atualizarVazio() }
+            })
+        }
+        topo.addView(linha(busca, botao("⚙") { abrirFerramentas() }.apply { contentDescription = getString(R.string.jg_ferramentas) }))
+        tela.addView(topo)
+
+        grade = GradeJogos(this) { detalhesJogo(it) }
+        tvVazio = texto(tamanho = 15f).apply { gravity = Gravity.CENTER; setPadding(dp(24), dp(32), dp(24), dp(32)) }
+        val corpo = android.widget.FrameLayout(this)
+        corpo.addView(grade.view)
+        corpo.addView(tvVazio, android.widget.FrameLayout.LayoutParams(-1, -2))
+        tela.addView(corpo, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        return tela
+    }
+
+    /** Janela com as ferramentas (organizar, capas, compactar, PS1, verificar). */
+    private fun abrirFerramentas() {
+        (painelFerramentas.parent as? ViewGroup)?.removeView(painelFerramentas)
+        atualizarFerramentas()
+        AlertDialog.Builder(this).setTitle(R.string.jg_ferramentas).setView(painelFerramentas)
+            .setPositiveButton(R.string.btn_fechar_escolha, null).show()
+    }
+
+    private fun atualizarVazio() {
+        val pasta = pastaSalva()
+        tvVazio.text = when {
+            pasta == null || !rbPasta.isChecked -> getString(R.string.ft_sem_pasta_escolhida)
+            Ferramentas.catalogo == null -> getString(R.string.ft_resumo_vazio)
+            grade.quantos == 0 -> getString(R.string.jg_nenhum)
+            else -> ""
+        }
+        tvVazio.visibility = if (tvVazio.text.isEmpty()) View.GONE else View.VISIBLE
+    }
+
+    /** Detalhes de um jogo, com as ações que cabem a ele. */
+    private fun detalhesJogo(j: Catalogo.Item) {
+        val c = Ferramentas.catalogo
+        val formato = when (j.tipo) {
+            Catalogo.Tipo.PS2 -> if (j.compactado) "PS2 · ZSO/CSO" else "PS2 · ISO"
+            Catalogo.Tipo.VCD -> "PS1 · POPStarter (VCD)"
+            Catalogo.Tipo.CUE -> "PS1 · Ember (CUE/BIN)"
+        }
+        val msg = buildString {
+            append(formato).append("\n")
+            append(getString(R.string.jg_codigo, j.id ?: getString(R.string.ft_sem_codigo))).append("\n")
+            append(String.format(Locale.getDefault(), "%.0f MiB", j.tamanho / 1048576.0)).append("\n")
+            append(j.rel)
+            if (j.foraDoLugar) append("\n\n").append(getString(R.string.jg_fora_lugar))
+            if (c != null && !c.temCapa(j)) append("\n").append(getString(R.string.jg_sem_capa))
+        }
+        val b = AlertDialog.Builder(this).setTitle(GradeJogos.titulo(j)).setMessage(msg).setNegativeButton(R.string.btn_fechar_escolha, null)
+        if (j.tipo == Catalogo.Tipo.PS2 && !j.foraDoLugar) {
+            val compactar = !j.compactado
+            b.setPositiveButton(if (compactar) R.string.jg_compactar else R.string.jg_descompactar) { _, _ ->
+                tarefa(getString(if (compactar) R.string.ft_btn_compactar else R.string.ft_btn_descompactar)) { _, r ->
+                    val jogos = Ferramentas.jogosDe(r, listOf(j))
+                    if (compactar) Ferramentas.compactar(this, jogos, false) else Ferramentas.descompactar(this, jogos, false)
+                }
+            }
+        }
+        if (j.foraDoLugar) b.setPositiveButton(R.string.ft_btn_organizar) { _, _ -> planejarOrganizacao() }
+        if (c != null && !c.temCapa(j) && j.id != null && !j.foraDoLugar) {
+            b.setNeutralButton(R.string.jg_baixar_capa) { _, _ ->
+                val grande = prefs.getBoolean("capa_grande", false)
+                tarefa(getString(R.string.ft_btn_baixar_capas), arte = true) { pasta, r ->
+                    Ferramentas.baixarCapas(this, pasta, r, if (grande) 280 else 140, if (grande) 400 else 200, so = j.rel)
+                }
+            }
+        }
+        b.show()
+    }
+
+    private fun montarFerramentas(): View {
+        val raiz = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(4), dp(14), dp(32))
+        }
+
         val cPasta = cartao(raiz)
         cPasta.addView(titulo(getString(R.string.ft_sec_pasta), getString(R.string.ft_sec_pasta)) { getString(R.string.ft_ajuda_pasta) })
         tvFtPasta = texto(tamanho = 14f).also { cPasta.addView(it) }
-        tvResumo = texto(tamanho = 14f).apply { setTypeface(typeface, Typeface.BOLD) }.also { cPasta.addView(it) }
-        botoesFt += botao(getString(R.string.ft_btn_ver)) { verJogos() }.also { cPasta.addView(it) }
         botoesFt += botao(getString(R.string.ft_btn_atualizar)) {
             tarefa(getString(R.string.ft_btn_atualizar), grava = false) { _, _ -> "" }
         }.also { cPasta.addView(it) }
@@ -531,9 +624,11 @@ class MainActivity : Activity() {
         val usavel = pasta != null && rbPasta.isChecked
         tvFtPasta.text = if (!usavel) getString(R.string.ft_sem_pasta_escolhida) else Fonte.descricao(this, pasta!!)
         val c = if (usavel) Ferramentas.catalogo else null
+        grade.mostrar(if (usavel) pasta else null, c)
+        atualizarVazio()
         tvResumo.text = when {
             !usavel -> ""
-            c == null -> getString(R.string.ft_resumo_vazio)
+            c == null -> ""
             else -> buildString {
                 append(getString(R.string.ft_resumo, c.ps2.size, c.ps1.size, c.semCapa, c.isos.size))
                 if (c.foraDoLugar > 0) append("\n").append(getString(R.string.ft_resumo_fora, c.foraDoLugar))
@@ -626,34 +721,9 @@ class MainActivity : Activity() {
         }
     }
 
-    /** Lista do catálogo (sem abrir nada: é instantâneo). */
-    private fun verJogos() {
-        val c = Ferramentas.catalogo
-        if (c == null) {
-            aviso(getString(R.string.ft_lendo))
-            tarefa(getString(R.string.ft_btn_atualizar), grava = false) { _, _ -> "" }
-            return
-        }
-        val texto = if (c.jogos.isEmpty()) getString(R.string.ft_nenhum_jogo)
-        else c.jogos.joinToString("\n") { j ->
-            val marca = when {
-                j.foraDoLugar -> "📁"
-                c.temCapa(j) -> "🖼"
-                else -> "▫"
-            }
-            val tipo = when (j.tipo) {
-                Catalogo.Tipo.PS2 -> ""
-                Catalogo.Tipo.VCD -> "PS1 · POPS · "
-                Catalogo.Tipo.CUE -> "PS1 · Ember · "
-            }
-            "$marca ${j.rel}\n     $tipo${j.id ?: getString(R.string.ft_sem_codigo)} · ${j.tamanho / (1024 * 1024)} MiB"
-        } + "\n\n" + getString(R.string.ft_legenda)
-        dialogo(getString(R.string.ft_btn_ver), texto)
-    }
-
     /** Escolhe quais jogos compactar (ISO) ou descompactar (ZSO/CSO), e se apaga os originais. */
     private fun escolherJogos(compactar: Boolean) {
-        val c = Ferramentas.catalogo ?: return verJogos()
+        val c = Ferramentas.catalogo ?: return aviso(getString(R.string.ft_resumo_vazio))
         val lista = c.jogos.filter { !it.ps1 && it.compactado != compactar }
         if (lista.isEmpty()) return aviso(getString(if (compactar) R.string.ft_nada_compactar else R.string.ft_nada_descompactar))
         val marcados = BooleanArray(lista.size)
