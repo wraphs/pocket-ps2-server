@@ -243,4 +243,11 @@
     <string name="cfg_rede_titulo">PS2 network (for all of them)</string>
     <string name="cfg_rede">• IP Address Type: Static\n• IP Address: %1$s\n• Mask: 255.255.255.0\n• Gateway: %2$s\n• DNS: %2$s\n\nUse a static IP: tethering DHCP disappears for a few seconds whenever the cable glitches (error 311 on the PS2). And the IP must be on the cable network: otherwise only UDPFS/UDPBD work; SMB, NFS and HTTP do not answer.</string>
     <string name="st_outra_rede">⚠ The PS2 has an IP from another network (%1$s). Only UDPFS/UDPBD work like this; SMB, NFS and HTTP do not. On the PS2: static IP %2$s, mask 255.255.255.0, gateway and DNS %3$s.</string>
+    <string name="esp_titulo">Low on space</string>
+    <string name="esp_temporario">This may need up to %1$s, and the games folder has %2$s free.\n\nI can temporarily use %3$s (%4$s free) to build the file: it is checked there, the original is deleted (if you asked) and the new file comes back to the games folder. Nothing is left behind.</string>
+    <string name="esp_manter_aviso">⚠ Keeping the original, the new file only comes back if it fits next to it. If not, it stays in the temporary place and the app tells you where.</string>
+    <string name="esp_usar">Use temporarily</string>
+    <string name="esp_nenhum">This may need up to %1$s and the games folder has %2$s free. No other place on the phone has enough space.\n\nTemporarily move some file (another game, for example) to a PC or another device, freeing at least %3$s, and try again. Then move it back.\n\nFree space elsewhere:</string>
+    <string name="ft_trazendo">Bringing %1$s back</string>
+    <string name="ft_volta_falhou">could not bring %1$s back (%3$s). The finished file is in %2$s: free some space and copy it from there.</string>
 </resources>

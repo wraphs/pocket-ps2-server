@@ -597,10 +597,7 @@ class MainActivity : Activity() {
         if (j.tipo == Catalogo.Tipo.PS2 && !j.foraDoLugar) {
             val compactar = !j.compactado
             b.setPositiveButton(if (compactar) R.string.jg_compactar else R.string.jg_descompactar) { _, _ ->
-                tarefa(getString(if (compactar) R.string.ft_btn_compactar else R.string.ft_btn_descompactar), pendrive = true) { _, r ->
-                    val jogos = Ferramentas.jogosDe(r, listOf(j))
-                    if (compactar) Ferramentas.compactar(this, jogos, false) else Ferramentas.descompactar(this, jogos, false)
-                }
+                confirmarCompactacao(listOf(j), compactar)
             }
         }
         if (j.foraDoLugar) b.setPositiveButton(R.string.ft_btn_organizar) { _, _ -> planejarOrganizacao() }
@@ -810,20 +807,56 @@ class MainActivity : Activity() {
             .setMultiChoiceItems(nomes, marcados) { _, i, m -> marcados[i] = m }
             .setPositiveButton(R.string.ok) { _, _ ->
                 val escolhidos = lista.filterIndexed { i, _ -> marcados[i] }
-                if (escolhidos.isEmpty()) return@setPositiveButton
-                val fazer = { apagar: Boolean ->
-                    tarefa(titulo, pendrive = true) { _, r ->
-                        val jogos = Ferramentas.jogosDe(r, escolhidos)
-                        if (compactar) Ferramentas.compactar(this, jogos, apagar) else Ferramentas.descompactar(this, jogos, apagar)
-                    }
-                }
-                AlertDialog.Builder(this).setTitle(titulo)
-                    .setMessage(getString(if (compactar) R.string.ft_conf_compactar else R.string.ft_conf_descompactar, escolhidos.size))
-                    .setPositiveButton(R.string.ft_manter) { _, _ -> fazer(false) }
-                    .setNeutralButton(R.string.ft_apagar) { _, _ -> fazer(true) }
-                    .setNegativeButton(R.string.cancelar, null).show()
+                if (escolhidos.isNotEmpty()) confirmarCompactacao(escolhidos, compactar)
             }
             .setNegativeButton(R.string.cancelar, null).show()
+    }
+
+    /** Pergunta se apaga os originais e segue para a conferência de espaço. */
+    private fun confirmarCompactacao(escolhidos: List<Catalogo.Item>, compactar: Boolean) {
+        val titulo = getString(if (compactar) R.string.ft_btn_compactar else R.string.ft_btn_descompactar)
+        AlertDialog.Builder(this).setTitle(titulo)
+            .setMessage(getString(if (compactar) R.string.ft_conf_compactar else R.string.ft_conf_descompactar, escolhidos.size))
+            .setPositiveButton(R.string.ft_manter) { _, _ -> comEspaco(escolhidos, compactar, false, titulo) }
+            .setNeutralButton(R.string.ft_apagar) { _, _ -> comEspaco(escolhidos, compactar, true, titulo) }
+            .setNegativeButton(R.string.cancelar, null).show()
+    }
+
+    /**
+     * Confere o espaço antes de compactar/descompactar. Se faltar na pasta, oferece montar a saída em outro
+     * volume (memória interna, cartão, outro pendrive) e trazer de volta; se não houver espaço em lugar nenhum,
+     * diz quanto falta e sugere mover algum arquivo temporariamente.
+     */
+    private fun comEspaco(itens: List<Catalogo.Item>, compactar: Boolean, apagar: Boolean, titulo: String) {
+        val pasta = pastaSalva() ?: return
+        val rodar = { temp: File? ->
+            tarefa(titulo, pendrive = true) { _, r ->
+                val jogos = Ferramentas.jogosDe(r, itens)
+                if (compactar) Ferramentas.compactar(this, jogos, apagar, temp) else Ferramentas.descompactar(this, jogos, apagar, temp)
+            }
+        }
+        fundo.execute {
+            val e = try { Ferramentas.espacoPara(this, pasta, Ferramentas.raizDe(this, pasta), itens, compactar) } catch (ex: Exception) { null }
+            runOnUiThread {
+                if (isFinishing) return@runOnUiThread
+                if (e == null || !e.falta) return@runOnUiThread rodar(null)
+                val gb = { b: Long -> String.format(Locale.getDefault(), "%.1f GB", b / 1073741824.0) }
+                val lugar = e.lugar
+                // Montar em outro lugar só resolve se, na volta, couber: apagando o original, ou se a saída for menor
+                if (lugar != null) {
+                    AlertDialog.Builder(this).setTitle(R.string.esp_titulo)
+                        .setMessage(getString(R.string.esp_temporario, gb(e.precisa), gb(e.livre), lugar.nome, gb(lugar.livre)) +
+                            if (apagar) "" else "\n\n" + getString(R.string.esp_manter_aviso))
+                        .setPositiveButton(R.string.esp_usar) { _, _ -> rodar(lugar.dir) }
+                        .setNegativeButton(R.string.cancelar, null).show()
+                } else {
+                    AlertDialog.Builder(this).setTitle(R.string.esp_titulo)
+                        .setMessage(getString(R.string.esp_nenhum, gb(e.precisa), gb(e.livre), gb(e.precisa - e.livre)) +
+                            e.lugares.joinToString("") { "\n• ${it.nome}: ${gb(it.livre)}" })
+                        .setPositiveButton(R.string.ok, null).show()
+                }
+            }
+        }
     }
 
     private fun caixaServidor(pai: LinearLayout, chave: String, rotulo: String, ajuda: () -> String): CheckBox {

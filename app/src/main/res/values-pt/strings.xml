@@ -242,4 +242,11 @@
     <string name="cfg_rede_titulo">Rede do PS2 (vale para todos)</string>
     <string name="cfg_rede">• IP Address Type: Static (fixo)\n• IP Address: %1$s\n• Mask: 255.255.255.0\n• Gateway: %2$s\n• DNS: %2$s\n\nUse IP fixo: o DHCP da ancoragem some por alguns segundos sempre que o cabo oscila (erro 311 no PS2). E o IP precisa ser da rede do cabo: com outro, só o UDPFS/UDPBD funcionam; SMB, NFS e HTTP não respondem.</string>
     <string name="st_outra_rede">⚠ O PS2 está com IP de outra rede (%1$s). Só UDPFS/UDPBD funcionam assim; SMB, NFS e HTTP não. No PS2: IP fixo %2$s, máscara 255.255.255.0, gateway e DNS %3$s.</string>
+    <string name="esp_titulo">Pouco espaço</string>
+    <string name="esp_temporario">Para isso podem ser precisos até %1$s, e a pasta dos jogos tem %2$s livres.\n\nPosso usar temporariamente %3$s (%4$s livres) para montar o arquivo: ele é conferido lá, o original é apagado (se você pediu) e o arquivo novo volta para a pasta dos jogos. Nada fica para trás.</string>
+    <string name="esp_manter_aviso">⚠ Mantendo o original, o arquivo novo só volta se couber ao lado dele. Se não couber, ele fica guardado no lugar temporário e o app avisa onde.</string>
+    <string name="esp_usar">Usar temporariamente</string>
+    <string name="esp_nenhum">Podem ser precisos até %1$s e a pasta dos jogos tem %2$s livres. Nenhum outro lugar do celular tem espaço suficiente.\n\nMova temporariamente algum arquivo (outro jogo, por exemplo) para o PC ou para outro aparelho, liberando pelo menos %3$s, e tente de novo. Depois é só devolver.\n\nEspaço livre nos outros lugares:</string>
+    <string name="ft_trazendo">Trazendo %1$s de volta</string>
+    <string name="ft_volta_falhou">não coube trazer %1$s de volta (%3$s). O arquivo pronto ficou em %2$s: libere espaço e copie de lá.</string>
 </resources>

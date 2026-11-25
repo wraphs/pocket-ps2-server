@@ -457,10 +457,92 @@ object Ferramentas {
         }
     }
 
+    // ------------------------------------------------------------------ espaço
+
+    /** Outro lugar do celular com espaço (pasta do app no volume: não precisa de permissão). */
+    class Lugar(val dir: File, val nome: String, val livre: Long)
+
+    /** [precisa]: maior saída de um jogo (eles vão um por vez); [livre] no destino (0 = desconhecido). */
+    class Espaco(val precisa: Long, val livre: Long, val lugares: List<Lugar>) {
+        val falta get() = livre in 1 until precisa
+        val lugar get() = lugares.firstOrNull { it.livre >= precisa + MARGEM }
+    }
+
+    private const val MARGEM = 32L * 1024 * 1024
+
+    /** Volume de um caminho/pasta: "primary" (memória interna) ou o id do pendrive/cartão. */
+    private fun volumeDe(caminhoOuPasta: String): String? {
+        if (Fonte.ehSaf(caminhoOuPasta)) return try {
+            android.provider.DocumentsContract.getTreeDocumentId(android.net.Uri.parse(caminhoOuPasta)).substringBefore(':')
+        } catch (e: Exception) { null }
+        val c = if (Fonte.ehPriv(caminhoOuPasta)) br.ps2ponte.priv.Privilegio.caminho(caminhoOuPasta) else caminhoOuPasta
+        val id = Regex("^/(?:storage|mnt/media_rw)/([^/]+)").find(c)?.groupValues?.get(1) ?: return null
+        return if (id == "emulated" || id == "self") "primary" else id
+    }
+
+    /**
+     * Quanto a compactação/descompactação de [itens] precisa e o que há livre; se faltar, quais outros volumes
+     * (memória interna, cartão, outro pendrive) podem guardar a saída temporariamente.
+     */
+    fun espacoPara(ctx: Context, pasta: String, raiz: VFile, itens: List<Catalogo.Item>, compactar: Boolean): Espaco {
+        val arvore = LocalTree(raiz)
+        val precisa = itens.maxOfOrNull { i ->
+            if (compactar) i.tamanho // pior caso: o ZSO do tamanho da ISO
+            else arvore.resolve(i.rel)?.let { tamanhoReal(it) } ?: i.tamanho
+        } ?: 0L
+        val livre = try { raiz.usableSpace() } catch (e: Exception) { 0L }
+        val meu = volumeDe(pasta)
+        val nomes = Compat.volumes(ctx).associate { (it.uuid ?: if (it.primario) "primary" else "") to it.descricao }
+        val lugares = ctx.getExternalFilesDirs(null).filterNotNull().mapNotNull { d ->
+            val v = volumeDe(d.path) ?: return@mapNotNull null
+            if (v.equals(meu, true)) return@mapNotNull null
+            Lugar(File(d, "temporario"), nomes[v] ?: nomes.entries.firstOrNull { it.key.equals(v, true) }?.value ?: v, d.usableSpace)
+        }.sortedByDescending { it.livre }
+        return Espaco(precisa, livre, lugares)
+    }
+
+    /** Onde montar a saída: na própria pasta, ou na pasta temporária [temp] de outro volume. */
+    private fun saida(temp: File?, pai: VFile, nome: String): VFile =
+        if (temp != null) LocalFile.root(temp.apply { mkdirs() }).child(nome) else pai.child(nome)
+
+    /** Traz para a pasta do jogo o arquivo montado no lugar temporário (cópia com progresso) e apaga o temporário. */
+    private fun trazer(ctx: Context, tmp: VFile, pai: VFile, nomeFinal: String, temp: File) {
+        val parte = pai.child("$nomeFinal.part")
+        if (parte.exists()) parte.delete()
+        try {
+            tmp.open(false).use { e ->
+                parte.open(true).use { s ->
+                    s.setLength(0)
+                    val buf = ByteArray(1 shl 20)
+                    var pos = 0L
+                    val tam = e.length()
+                    while (pos < tam) {
+                        val n = e.readFully(pos, buf, 0, minOf(buf.size.toLong(), tam - pos).toInt())
+                        if (n <= 0) throw IOException("fim inesperado")
+                        s.write(pos, buf, 0, n)
+                        pos += n
+                        passo(pos, tam, ctx.getString(R.string.ft_trazendo, nomeFinal))
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            parte.delete()
+            // O arquivo pronto fica no lugar temporário: nada se perde
+            throw IOException(ctx.getString(R.string.ft_volta_falhou, nomeFinal, temp.path, e.message ?: ""))
+        }
+        val final = pai.child(nomeFinal)
+        if (final.exists()) final.delete()
+        if (!parte.renameTo(final)) throw IOException(ctx.getString(R.string.ft_nao_substituiu, nomeFinal))
+        tmp.delete()
+    }
+
     // ------------------------------------------------------------------ compactar
 
-    /** ISO -> ZSO (o OPL lê ZSO direto; para o Neutrino/UDPBD o app descompacta na hora). */
-    fun compactar(ctx: Context, lista: List<Jogo>, apagarOriginal: Boolean): String {
+    /**
+     * ISO -> ZSO (o OPL lê ZSO direto; para o Neutrino/UDPBD o app descompacta na hora).
+     * [temp]: sem espaço na pasta, o ZSO é montado e conferido lá; a ISO é apagada (se pedido) e o ZSO volta.
+     */
+    fun compactar(ctx: Context, lista: List<Jogo>, apagarOriginal: Boolean, temp: File? = null): String {
         var economia = 0L
         var feitos = 0
         val totalGeral = lista.sumOf { it.arquivo.length() }
@@ -470,8 +552,8 @@ object Ferramentas {
             val pai = f.parentFile ?: continue
             val nome = f.name.substringBeforeLast('.')
             val livre = f.usableSpace()
-            if (livre in 1 until f.length()) throw IOException(ctx.getString(R.string.ft_sem_espaco, f.name))
-            val tmp = pai.child("$nome.zso.part")
+            if (temp == null && livre in 1 until f.length()) throw IOException(ctx.getString(R.string.ft_sem_espaco, f.name))
+            val tmp = saida(temp, pai, "$nome.zso.part")
             if (tmp.exists()) tmp.delete()
             val tam = try {
                 f.open(false).use { e ->
@@ -487,20 +569,26 @@ object Ferramentas {
                 throw e
             }
             conferir(f, tmp)
-            val final = pai.child("$nome.zso")
-            if (final.exists()) final.delete()
-            if (!tmp.renameTo(final)) throw IOException(ctx.getString(R.string.ft_nao_substituiu, final.name))
             val original = f.length()
+            if (temp != null) {
+                // Primeiro libera o espaço da ISO, depois traz o ZSO conferido
+                if (apagarOriginal && !f.delete()) throw IOException(ctx.getString(R.string.ft_nao_substituiu, f.name))
+                trazer(ctx, tmp, pai, "$nome.zso", temp)
+            } else {
+                val final = pai.child("$nome.zso")
+                if (final.exists()) final.delete()
+                if (!tmp.renameTo(final)) throw IOException(ctx.getString(R.string.ft_nao_substituiu, final.name))
+                if (apagarOriginal) f.delete()
+            }
             economia += original - tam
-            if (apagarOriginal) f.delete()
             base += original
             feitos++
         }
         return ctx.getString(R.string.ft_compactados, feitos, economia / (1024.0 * 1024))
     }
 
-    /** ZSO/CSO -> ISO. */
-    fun descompactar(ctx: Context, lista: List<Jogo>, apagarOriginal: Boolean): String {
+    /** ZSO/CSO -> ISO. [temp] como em [compactar]. */
+    fun descompactar(ctx: Context, lista: List<Jogo>, apagarOriginal: Boolean, temp: File? = null): String {
         var feitos = 0
         val totais = lista.map { tamanhoReal(it.arquivo) }
         val totalGeral = totais.sum()
@@ -510,8 +598,8 @@ object Ferramentas {
             val pai = f.parentFile ?: return@forEachIndexed
             val nome = f.name.substringBeforeLast('.')
             val livre = f.usableSpace()
-            if (livre in 1 until totais[k]) throw IOException(ctx.getString(R.string.ft_sem_espaco, f.name))
-            val tmp = pai.child("$nome.iso.part")
+            if (temp == null && livre in 1 until totais[k]) throw IOException(ctx.getString(R.string.ft_sem_espaco, f.name))
+            val tmp = saida(temp, pai, "$nome.iso.part")
             if (tmp.exists()) tmp.delete()
             try {
                 Comprimido.abrir(f.open(false)).use { e ->
@@ -533,10 +621,15 @@ object Ferramentas {
                 tmp.delete()
                 throw e
             }
-            val final = pai.child("$nome.iso")
-            if (final.exists()) final.delete()
-            if (!tmp.renameTo(final)) throw IOException(ctx.getString(R.string.ft_nao_substituiu, final.name))
-            if (apagarOriginal) f.delete()
+            if (temp != null) {
+                if (apagarOriginal && !f.delete()) throw IOException(ctx.getString(R.string.ft_nao_substituiu, f.name))
+                trazer(ctx, tmp, pai, "$nome.iso", temp)
+            } else {
+                val final = pai.child("$nome.iso")
+                if (final.exists()) final.delete()
+                if (!tmp.renameTo(final)) throw IOException(ctx.getString(R.string.ft_nao_substituiu, final.name))
+                if (apagarOriginal) f.delete()
+            }
             base += totais[k]
             feitos++
         }
