@@ -767,7 +767,15 @@ class MainActivity : Activity() {
         mostrandoPedido = true
         val titulo = getString(R.string.ft_btn_organizar)
         val fazer = { apagar: Boolean ->
-            Ferramentas.rodar(this, titulo) { Ferramentas.executarOrganizacao(this, o, apagar) }
+            val conversoes = o.plano.acoes.filter { it.conversao }
+            if (conversoes.isEmpty()) {
+                Ferramentas.rodar(this, titulo) { Ferramentas.executarOrganizacao(this, o, apagar) }
+            } else {
+                // Conversões de PS1 precisam de espaço para o arquivo novo: mesma conferência da compactação
+                comEspaco(apagar, { p, r -> Ferramentas.espacoCom(this, p, r, conversoes.maxOf { it.bytes }) }) { temp ->
+                    Ferramentas.rodar(this, titulo) { Ferramentas.executarOrganizacao(this, o, apagar, temp) }
+                }
+            }
         }
         val b = AlertDialog.Builder(this).setTitle(titulo).setMessage(o.resumo(this))
             .setOnDismissListener { mostrandoPedido = false }
@@ -817,8 +825,8 @@ class MainActivity : Activity() {
         val titulo = getString(if (compactar) R.string.ft_btn_compactar else R.string.ft_btn_descompactar)
         AlertDialog.Builder(this).setTitle(titulo)
             .setMessage(getString(if (compactar) R.string.ft_conf_compactar else R.string.ft_conf_descompactar, escolhidos.size))
-            .setPositiveButton(R.string.ft_manter) { _, _ -> comEspaco(escolhidos, compactar, false, titulo) }
-            .setNeutralButton(R.string.ft_apagar) { _, _ -> comEspaco(escolhidos, compactar, true, titulo) }
+            .setPositiveButton(R.string.ft_manter) { _, _ -> compactarComEspaco(escolhidos, compactar, false, titulo) }
+            .setNeutralButton(R.string.ft_apagar) { _, _ -> compactarComEspaco(escolhidos, compactar, true, titulo) }
             .setNegativeButton(R.string.cancelar, null).show()
     }
 
@@ -827,16 +835,20 @@ class MainActivity : Activity() {
      * volume (memória interna, cartão, outro pendrive) e trazer de volta; se não houver espaço em lugar nenhum,
      * diz quanto falta e sugere mover algum arquivo temporariamente.
      */
-    private fun comEspaco(itens: List<Catalogo.Item>, compactar: Boolean, apagar: Boolean, titulo: String) {
-        val pasta = pastaSalva() ?: return
-        val rodar = { temp: File? ->
+    private fun compactarComEspaco(itens: List<Catalogo.Item>, compactar: Boolean, apagar: Boolean, titulo: String) {
+        comEspaco(apagar, { p, r -> Ferramentas.espacoPara(this, p, r, itens, compactar) }) { temp ->
             tarefa(titulo, pendrive = true) { _, r ->
                 val jogos = Ferramentas.jogosDe(r, itens)
                 if (compactar) Ferramentas.compactar(this, jogos, apagar, temp) else Ferramentas.descompactar(this, jogos, apagar, temp)
             }
         }
+    }
+
+    /** Confere o espaço com [calcular] (numa thread) e roda [rodar] com a pasta temporária escolhida, ou null. */
+    private fun comEspaco(apagar: Boolean, calcular: (String, br.ps2ponte.core.fs.VFile) -> Ferramentas.Espaco, rodar: (File?) -> Unit) {
+        val pasta = pastaSalva() ?: return
         fundo.execute {
-            val e = try { Ferramentas.espacoPara(this, pasta, Ferramentas.raizDe(this, pasta), itens, compactar) } catch (ex: Exception) { null }
+            val e = try { calcular(pasta, Ferramentas.raizDe(this, pasta)) } catch (ex: Exception) { null }
             runOnUiThread {
                 if (isFinishing) return@runOnUiThread
                 if (e == null || !e.falta) return@runOnUiThread rodar(null)

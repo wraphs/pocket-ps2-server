@@ -174,6 +174,31 @@ class Ps1Test {
     }
 
     @Test
+    fun conversaoPorPastaTemporaria() {
+        val dados = faixaDados(300)
+        val pen = File(dir, "pen").apply { mkdirs() }
+        val outro = File(dir, "outro").apply { mkdirs() }
+        cueSimples(pen, "Spyro", dados)
+        val raiz = LocalFile.root(pen)
+        val temp = LocalFile.root(outro)
+
+        // CUE/BIN -> VCD montado no outro volume, original apagado, VCD trazido de volta
+        val p1 = OrganizadorPs1(raiz).planejar(Catalogo.varrer(raiz, null), OrganizadorPs1.Destino.POPS)
+        assertTrue(p1.executar(true, semProgresso, temp).isEmpty())
+        assertEquals(Ps1.CABECALHO_VCD + dados.size.toLong(), File(pen, "POPS/Spyro.VCD").length())
+        assertFalse(File(pen, "Spyro.bin").exists())
+        assertTrue(outro.listFiles()!!.isEmpty(), "o temporário fica vazio")
+
+        // E de volta: VCD -> CUE/BIN pelo outro volume
+        val p2 = OrganizadorPs1(raiz).planejar(Catalogo.varrer(raiz, null), OrganizadorPs1.Destino.EMBER)
+        assertTrue(p2.executar(true, semProgresso, temp).isEmpty())
+        assertContentEquals(dados, File(pen, "EMBER/games/Spyro/Spyro.bin").readBytes())
+        assertTrue(File(pen, "EMBER/games/Spyro/Spyro.cue").exists())
+        assertFalse(File(pen, "POPS/Spyro.VCD").exists())
+        assertTrue(outro.listFiles()!!.isEmpty())
+    }
+
+    @Test
     fun multidisco() {
         val dados = faixaDados(200)
         File(dir, "FF").mkdirs()

@@ -288,7 +288,7 @@ object Ferramentas {
      * Cria as pastas do OPL, leva os jogos de PS2 fora do lugar para DVD/ ou CD/ e executa o plano de PS1
      * (POPS/ e EMBER/games/, multidisco, conversões). [apagarConvertidos] só vale para as conversões.
      */
-    fun executarOrganizacao(ctx: Context, o: Organizacao, apagarConvertidos: Boolean): String {
+    fun executarOrganizacao(ctx: Context, o: Organizacao, apagarConvertidos: Boolean, temp: File? = null): String {
         val raiz = o.raiz
         for (n in PASTAS_OPL) if (pasta(raiz, n) == null) raiz.child(n).mkdirs()
         val dvd = pasta(raiz, "DVD") ?: throw IOException(ctx.getString(R.string.ft_sem_pasta, "DVD"))
@@ -301,7 +301,7 @@ object Ferramentas {
             val destino = (if (tamanhoReal(f) <= LIMITE_CD) cd else dvd).child(f.name)
             if (destino.exists() || !f.renameTo(destino)) falhas += f.name else movidos++
         }
-        val falhasPs1 = o.plano.executar(apagarConvertidos) { feito, total, texto -> passo(feito, total, texto) }
+        val falhasPs1 = o.plano.executar(apagarConvertidos, { feito, total, texto -> passo(feito, total, texto) }, temp?.let { LocalFile.root(it.apply { mkdirs() }) })
         val c = atualizarCatalogo(ctx, o.pasta, raiz)
         val sb = StringBuilder(ctx.getString(R.string.ft_organizado, movidos + o.plano.acoes.size - falhasPs1.size))
         if (falhas.isNotEmpty()) sb.append("\n").append(ctx.getString(R.string.ft_nao_movidos, falhas.joinToString()))
@@ -490,6 +490,11 @@ object Ferramentas {
             if (compactar) i.tamanho // pior caso: o ZSO do tamanho da ISO
             else arvore.resolve(i.rel)?.let { tamanhoReal(it) } ?: i.tamanho
         } ?: 0L
+        return espacoCom(ctx, pasta, raiz, precisa)
+    }
+
+    /** Como [espacoPara], para uma necessidade já conhecida (ex.: as conversões de PS1 do Organizar). */
+    fun espacoCom(ctx: Context, pasta: String, raiz: VFile, precisa: Long): Espaco {
         val livre = try { raiz.usableSpace() } catch (e: Exception) { 0L }
         val meu = volumeDe(pasta)
         val nomes = Compat.volumes(ctx).associate { (it.uuid ?: if (it.primario) "primary" else "") to it.descricao }

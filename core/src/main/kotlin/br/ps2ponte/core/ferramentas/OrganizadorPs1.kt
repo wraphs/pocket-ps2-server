@@ -16,7 +16,7 @@ import java.io.IOException
 class OrganizadorPs1(private val raiz: VFile) {
     enum class Destino { MANTER, POPS, EMBER }
 
-    class Acao(val descricao: String, val conversao: Boolean, val bytes: Long, internal val fazer: (Progresso, Boolean) -> Unit)
+    class Acao(val descricao: String, val conversao: Boolean, val bytes: Long, internal val fazer: (Progresso, Boolean, VFile?) -> Unit)
 
     fun interface Progresso {
         /** Lança para cancelar. */
@@ -27,12 +27,16 @@ class OrganizadorPs1(private val raiz: VFile) {
         val conversoes get() = acoes.count { it.conversao }
         val vazio get() = acoes.isEmpty()
 
-        /** Executa tudo; [apagarOriginais] só vale para conversões (movidas não duplicam). Devolve as falhas. */
-        fun executar(apagarOriginais: Boolean, p: Progresso): List<String> {
+        /**
+         * Executa tudo; [apagarOriginais] só vale para conversões (movidas não duplicam). Com [temp] (pasta em outro
+         * volume, quando falta espaço), cada conversão é montada lá, o original é apagado (se pedido) e o resultado
+         * volta para o lugar certo. Devolve as falhas.
+         */
+        fun executar(apagarOriginais: Boolean, p: Progresso, temp: VFile? = null): List<String> {
             val falhas = mutableListOf<String>()
             for (a in acoes) {
                 try {
-                    a.fazer(p, apagarOriginais)
+                    a.fazer(p, apagarOriginais, temp)
                 } catch (e: IOException) {
                     falhas += "${a.descricao}: ${e.message}"
                 }
@@ -101,18 +105,18 @@ class OrganizadorPs1(private val raiz: VFile) {
             val nome = nomes[k]
             if (nome.length > 60) avisos += "⚠ $nome: nome longo (o POPStarter aceita até ~60 letras com segurança)"
             if (d.item.tipo == Catalogo.Tipo.VCD) {
-                acoes += Acao("${d.item.rel} → POPS/$nome", false, 0) { _, _ ->
+                acoes += Acao("${d.item.rel} → POPS/$nome", false, 0) { _, _, _ ->
                     mover(d.arquivo, pasta("POPS"), nome)
                 }
             } else {
                 val cue = lerCue(d.arquivo)
                 Ps1.prontoParaVcd(cue)?.let { avisos += "✗ ${d.item.rel}: $it"; return }
                 val bytes = cue.arquivos.sumOf { d.arquivo.parentFile!!.child(it).length() }
-                acoes += Acao("${d.item.rel} → POPS/$nome (CUE/BIN → VCD)", true, bytes) { p, apagar ->
+                acoes += Acao("${d.item.rel} → POPS/$nome (CUE/BIN → VCD)", true, bytes) { p, apagar, temp ->
                     val pops = pasta("POPS")
                     val destino = pops.child(nome)
                     if (destino.exists()) throw IOException("POPS/$nome já existe")
-                    val tmp = pops.child("$nome.part")
+                    val tmp = (temp ?: pops).child("$nome.part")
                     if (tmp.exists()) tmp.delete()
                     val bins = cue.arquivos.map { d.arquivo.parentFile!!.child(it).open(false) }
                     try {
@@ -122,12 +126,18 @@ class OrganizadorPs1(private val raiz: VFile) {
                     } finally {
                         bins.forEach { it.close() }
                     }
-                    if (!tmp.renameTo(destino)) throw IOException("não consegui gravar POPS/$nome")
-                    if (apagar) apagarCueBin(d.arquivo, cue)
+                    if (temp == null) {
+                        if (!tmp.renameTo(destino)) throw IOException("não consegui gravar POPS/$nome")
+                        if (apagar) apagarCueBin(d.arquivo, cue)
+                    } else {
+                        // Libera o espaço do CUE/BIN antes de trazer o VCD
+                        if (apagar) apagarCueBin(d.arquivo, cue)
+                        trazer(tmp, destino, p)
+                    }
                 }
             }
         }
-        if (g.size > 1) acoes += Acao("multidisco: ${g.first().titulo} (DISCS.TXT/VMCDIR.TXT)", false, 0) { _, _ -> escreverDiscsPops(nomes) }
+        if (g.size > 1) acoes += Acao("multidisco: ${g.first().titulo} (DISCS.TXT/VMCDIR.TXT)", false, 0) { _, _, _ -> escreverDiscsPops(nomes) }
         if (g.size > 4) avisos += "⚠ ${g.first().titulo}: ${g.size} discos; o POPStarter troca entre no máximo 4"
     }
 
@@ -153,7 +163,7 @@ class OrganizadorPs1(private val raiz: VFile) {
             cues += "$base.cue"
             if (d.item.tipo == Catalogo.Tipo.CUE) {
                 val cue = try { lerCue(d.arquivo) } catch (e: IOException) { avisos += "✗ ${d.item.rel}: ${e.message}"; return }
-                acoes += Acao("${d.item.rel} → EMBER/games/$jogo/", false, 0) { _, _ ->
+                acoes += Acao("${d.item.rel} → EMBER/games/$jogo/", false, 0) { _, _, _ ->
                     val dest = pastaJogo(jogo)
                     val pai = d.arquivo.parentFile!!
                     for (b in cue.arquivos) mover(pai.child(b), dest, b)
@@ -162,28 +172,34 @@ class OrganizadorPs1(private val raiz: VFile) {
                     mover(d.arquivo, dest, "$base.cue")
                 }
             } else {
-                acoes += Acao("${d.item.rel} → EMBER/games/$jogo/ (VCD → CUE/BIN)", true, d.item.tamanho) { p, apagar ->
+                acoes += Acao("${d.item.rel} → EMBER/games/$jogo/ (VCD → CUE/BIN)", true, d.item.tamanho) { p, apagar, temp ->
                     val dest = pastaJogo(jogo)
                     val bin = dest.child("$base.bin")
                     if (bin.exists()) throw IOException("EMBER/games/$jogo/$base.bin já existe")
-                    d.arquivo.open(false).use { e ->
+                    val tmp = (temp ?: dest).child("$base.bin.part")
+                    if (tmp.exists()) tmp.delete()
+                    val cueTexto = d.arquivo.open(false).use { e ->
                         val cab = ByteArray(2048).also { e.readFully(0, it, 0, it.size) }
-                        val cueTexto = Ps1.cueDoVcd(cab, "$base.bin")
-                        val tmp = dest.child("$base.bin.part")
-                        if (tmp.exists()) tmp.delete()
+                        val texto = Ps1.cueDoVcd(cab, "$base.bin")
                         try {
                             tmp.open(true).use { s -> copiar(e, Ps1.CABECALHO_VCD.toLong(), s, p, "$base.bin") }
                         } catch (t: Throwable) {
                             tmp.delete(); throw t
                         }
-                        if (!tmp.renameTo(bin)) throw IOException("não consegui gravar $base.bin")
-                        gravarTexto(dest.child("$base.cue"), cueTexto)
+                        texto
                     }
-                    if (apagar) d.arquivo.delete()
+                    if (temp == null) {
+                        if (!tmp.renameTo(bin)) throw IOException("não consegui gravar $base.bin")
+                        if (apagar) d.arquivo.delete()
+                    } else {
+                        if (apagar) d.arquivo.delete()
+                        trazer(tmp, bin, p)
+                    }
+                    gravarTexto(dest.child("$base.cue"), cueTexto)
                 }
             }
         }
-        if (g.size > 1) acoes += Acao("multidisco: $jogo (Discs.txt)", false, 0) { _, _ -> gravarTexto(pastaJogo(jogo).child("Discs.txt"), cues.joinToString("\r\n") + "\r\n") }
+        if (g.size > 1) acoes += Acao("multidisco: $jogo (Discs.txt)", false, 0) { _, _, _ -> gravarTexto(pastaJogo(jogo).child("Discs.txt"), cues.joinToString("\r\n") + "\r\n") }
     }
 
     private fun pastaJogo(jogo: String): VFile {
@@ -201,7 +217,7 @@ class OrganizadorPs1(private val raiz: VFile) {
             val esperado = nomes.take(4).joinToString("\r\n") + "\r\n"
             val pops = g.first().arquivo.parentFile ?: return null
             val ok = nomes.all { n -> lerTexto(pops.child(n.substringBeforeLast('.')).child("DISCS.TXT")) == esperado }
-            return if (ok) null else Acao("multidisco: ${g.first().titulo} (DISCS.TXT/VMCDIR.TXT)", false, 0) { _, _ -> escreverDiscsPopsEm(pops, nomes) }
+            return if (ok) null else Acao("multidisco: ${g.first().titulo} (DISCS.TXT/VMCDIR.TXT)", false, 0) { _, _, _ -> escreverDiscsPopsEm(pops, nomes) }
         }
         val pastas = g.map { it.item.pastaEmber }.toSet()
         if (pastas.size != 1) return null // discos em pastas diferentes do Ember: o usuário escolheu assim
@@ -209,7 +225,7 @@ class OrganizadorPs1(private val raiz: VFile) {
         val esperado = g.joinToString("\r\n") { it.item.nome } + "\r\n"
         val atual = lerTexto(dir.listFiles()?.firstOrNull { it.name.equals("Discs.txt", true) } ?: dir.child("Discs.txt"))
         return if (atual?.replace("\r\n", "\n")?.trim() == esperado.replace("\r\n", "\n").trim()) null
-        else Acao("multidisco: ${g.first().titulo} (Discs.txt)", false, 0) { _, _ -> gravarTexto(dir.child("Discs.txt"), esperado) }
+        else Acao("multidisco: ${g.first().titulo} (Discs.txt)", false, 0) { _, _, _ -> gravarTexto(dir.child("Discs.txt"), esperado) }
     }
 
     private fun escreverDiscsPopsEm(pops: VFile, nomes: List<String>) {
@@ -241,6 +257,22 @@ class OrganizadorPs1(private val raiz: VFile) {
         val alvo = dest.child(nome)
         if (alvo.exists()) throw IOException("${dest.name}/$nome já existe")
         if (!f.renameTo(alvo)) throw IOException("o Android não deixou mover ${f.name}")
+    }
+
+    /** Copia o resultado montado em outro volume para [destino] (via ".part") e apaga o temporário. */
+    private fun trazer(tmp: VFile, destino: VFile, p: Progresso) {
+        val pai = destino.parentFile ?: throw IOException("destino sem pasta")
+        val parte = pai.child(destino.name + ".part")
+        if (parte.exists()) parte.delete()
+        try {
+            tmp.open(false).use { e -> parte.open(true).use { s -> copiar(e, 0, s, p, destino.name) } }
+        } catch (t: Throwable) {
+            parte.delete()
+            // O arquivo pronto continua no temporário: nada se perde
+            throw IOException("não coube trazer ${destino.name} de volta; o arquivo pronto ficou em ${tmp.path} (${t.message})")
+        }
+        if (!parte.renameTo(destino)) throw IOException("não consegui gravar ${destino.name}")
+        tmp.delete()
     }
 
     private fun copiar(e: VHandle, de: Long, s: VHandle, p: Progresso, nome: String) {
