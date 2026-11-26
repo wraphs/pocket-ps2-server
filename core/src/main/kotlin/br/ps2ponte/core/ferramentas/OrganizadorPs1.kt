@@ -130,9 +130,10 @@ class OrganizadorPs1(private val raiz: VFile) {
                         if (!tmp.renameTo(destino)) throw IOException("não consegui gravar POPS/$nome")
                         if (apagar) apagarCueBin(d.arquivo, cue)
                     } else {
-                        // Libera o espaço do CUE/BIN antes de trazer o VCD
+                        // Pronto e com o nome final no temporário; libera o espaço do CUE/BIN e traz o VCD
+                        val pronto = Temporario.marcar(tmp, nome, "${pops.name}/$nome")
                         if (apagar) apagarCueBin(d.arquivo, cue)
-                        trazer(tmp, destino, p)
+                        Temporario.trazer(pronto, destino, pops.usableSpace()) { f, t -> p.passo(f, t, nome) }
                     }
                 }
             }
@@ -188,14 +189,16 @@ class OrganizadorPs1(private val raiz: VFile) {
                         }
                         texto
                     }
+                    // A folha primeiro: se a .bin ficar esperando no temporário, o app sabe para onde ela vai
+                    gravarTexto(dest.child("$base.cue"), cueTexto)
                     if (temp == null) {
                         if (!tmp.renameTo(bin)) throw IOException("não consegui gravar $base.bin")
                         if (apagar) d.arquivo.delete()
                     } else {
+                        val pronto = Temporario.marcar(tmp, "$base.bin", "EMBER/games/${dest.name}/$base.bin")
                         if (apagar) d.arquivo.delete()
-                        trazer(tmp, bin, p)
+                        Temporario.trazer(pronto, bin, dest.usableSpace()) { f, t -> p.passo(f, t, "$base.bin") }
                     }
-                    gravarTexto(dest.child("$base.cue"), cueTexto)
                 }
             }
         }
@@ -257,22 +260,6 @@ class OrganizadorPs1(private val raiz: VFile) {
         val alvo = dest.child(nome)
         if (alvo.exists()) throw IOException("${dest.name}/$nome já existe")
         if (!f.renameTo(alvo)) throw IOException("o Android não deixou mover ${f.name}")
-    }
-
-    /** Copia o resultado montado em outro volume para [destino] (via ".part") e apaga o temporário. */
-    private fun trazer(tmp: VFile, destino: VFile, p: Progresso) {
-        val pai = destino.parentFile ?: throw IOException("destino sem pasta")
-        val parte = pai.child(destino.name + ".part")
-        if (parte.exists()) parte.delete()
-        try {
-            tmp.open(false).use { e -> parte.open(true).use { s -> copiar(e, 0, s, p, destino.name) } }
-        } catch (t: Throwable) {
-            parte.delete()
-            // O arquivo pronto continua no temporário: nada se perde
-            throw IOException("não coube trazer ${destino.name} de volta; o arquivo pronto ficou em ${tmp.path} (${t.message})")
-        }
-        if (!parte.renameTo(destino)) throw IOException("não consegui gravar ${destino.name}")
-        tmp.delete()
     }
 
     private fun copiar(e: VHandle, de: Long, s: VHandle, p: Progresso, nome: String) {

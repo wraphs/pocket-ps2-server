@@ -249,5 +249,13 @@
     <string name="esp_usar">Use temporarily</string>
     <string name="esp_nenhum">This may need up to %1$s and the games folder has %2$s free. No other place on the phone has enough space.\n\nTemporarily move some file (another game, for example) to a PC or another device, freeing at least %3$s, and try again. Then move it back.\n\nFree space elsewhere:</string>
     <string name="ft_trazendo">Bringing %1$s back</string>
-    <string name="ft_volta_falhou">could not bring %1$s back (%3$s). The finished file is in %2$s: free some space and copy it from there.</string>
+    <string name="ft_volta_falhou">%1$s is ready but did not come back (%3$s). It is in %2$s with the right name; tap ↩ on the Games tab to try again.</string>
+    <string name="esp_servidor">The server is on, and the PS2 may have the game open. While it is open, deleting the original does not free the space, so the new file would not fit back.\n\nStop the server first (it is quick) and go on.</string>
+    <string name="esp_parar">Stop the server and continue</string>
+    <string name="ft_pendentes">↩ %1$d file(s) waiting to go back to the games folder. Tap here.</string>
+    <string name="ft_pendentes_titulo">Files waiting</string>
+    <string name="ft_pendentes_ajuda">%1$d finished and checked file(s) stayed in the temporary place because they did not fit on the way back. They already have their final name; nothing was lost.\n\nBring them now? If space is still short, the app says how much and they keep waiting.</string>
+    <string name="ft_btn_trazer">Bring back</string>
+    <string name="ft_trazidos">%1$d of %2$d file(s) brought back.</string>
+    <string name="ft_volta_sem_espaco">%1$s is ready, but the games folder is %2$d MiB short to bring it back. It is in %3$s with the right name: free some space and tap ↩ on the Games tab.</string>
 </resources>

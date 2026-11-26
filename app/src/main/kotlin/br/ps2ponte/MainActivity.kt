@@ -507,7 +507,12 @@ class MainActivity : Activity() {
 
         tvResumo = texto(tamanho = 13f).apply {
             setPadding(0, dp(8), 0, 0)
-            setOnClickListener { if (Ferramentas.soLeitura) mostrarSoLeitura() }
+            setOnClickListener {
+                when {
+                    Ferramentas.pendentesCache > 0 -> mostrarPendentes()
+                    Ferramentas.soLeitura -> mostrarSoLeitura()
+                }
+            }
         }.also { topo.addView(it) }
         val busca = EditText(this).apply {
             hint = getString(R.string.jg_buscar)
@@ -550,6 +555,16 @@ class MainActivity : Activity() {
             }
             .setNegativeButton(R.string.btn_limpar) { _, _ -> Estado.limparJogos() }
             .show()
+    }
+
+    /** Arquivos que ficaram num volume temporário: trazer agora para a pasta dos jogos. */
+    private fun mostrarPendentes() {
+        AlertDialog.Builder(this).setTitle(R.string.ft_pendentes_titulo)
+            .setMessage(getString(R.string.ft_pendentes_ajuda, Ferramentas.pendentesCache))
+            .setPositiveButton(R.string.ft_btn_trazer) { _, _ ->
+                tarefa(getString(R.string.ft_btn_trazer), pendrive = true) { p, r -> Ferramentas.trazerPendentes(this, p, r) }
+            }
+            .setNegativeButton(R.string.btn_fechar_escolha, null).show()
     }
 
     /** Pendrive só leitura: explica a pasta de apoio. */
@@ -708,6 +723,7 @@ class MainActivity : Activity() {
                 if (c.foraDoLugar > 0) append("\n").append(getString(R.string.ft_resumo_fora, c.foraDoLugar))
                 if (c.tarDesatualizado && c.tarData > 0 && !Ferramentas.soLeitura) append("\n").append(getString(R.string.ft_resumo_tar))
                 if (Ferramentas.soLeitura) append("\n").append(getString(R.string.ft_so_leitura))
+                if (Ferramentas.pendentesCache > 0) append("\n").append(getString(R.string.ft_pendentes, Ferramentas.pendentesCache))
             }
         }
         tvResumo.visibility = if (tvResumo.text.isEmpty()) View.GONE else View.VISIBLE
@@ -847,6 +863,17 @@ class MainActivity : Activity() {
     /** Confere o espaço com [calcular] (numa thread) e roda [rodar] com a pasta temporária escolhida, ou null. */
     private fun comEspaco(apagar: Boolean, calcular: (String, br.ps2ponte.core.fs.VFile) -> Ferramentas.Espaco, rodar: (File?) -> Unit) {
         val pasta = pastaSalva() ?: return
+        if (apagar && Estado.rodando) {
+            // Com o servidor ligado o PS2 pode estar com o jogo aberto: apagar não libera o espaço até ele fechar,
+            // e o arquivo novo não caberia na volta. Para antes (os arquivos fecham em segundo plano).
+            AlertDialog.Builder(this).setTitle(R.string.esp_titulo).setMessage(R.string.esp_servidor)
+                .setPositiveButton(R.string.esp_parar) { _, _ ->
+                    ServidorService.parar(this)
+                    handler.postDelayed({ if (!isFinishing) comEspaco(apagar, calcular, rodar) }, 3000)
+                }
+                .setNegativeButton(R.string.cancelar, null).show()
+            return
+        }
         fundo.execute {
             val e = try { calcular(pasta, Ferramentas.raizDe(this, pasta)) } catch (ex: Exception) { null }
             runOnUiThread {

@@ -248,5 +248,13 @@
     <string name="esp_usar">Usar temporariamente</string>
     <string name="esp_nenhum">Podem ser precisos até %1$s e a pasta dos jogos tem %2$s livres. Nenhum outro lugar do celular tem espaço suficiente.\n\nMova temporariamente algum arquivo (outro jogo, por exemplo) para o PC ou para outro aparelho, liberando pelo menos %3$s, e tente de novo. Depois é só devolver.\n\nEspaço livre nos outros lugares:</string>
     <string name="ft_trazendo">Trazendo %1$s de volta</string>
-    <string name="ft_volta_falhou">não coube trazer %1$s de volta (%3$s). O arquivo pronto ficou em %2$s: libere espaço e copie de lá.</string>
+    <string name="ft_volta_falhou">%1$s ficou pronto, mas não voltou (%3$s). Ele está em %2$s com o nome certo; toque em ↩ na aba Jogos para tentar de novo.</string>
+    <string name="esp_servidor">O servidor está ligado, e o PS2 pode estar com o jogo aberto. Enquanto ele estiver aberto, apagar o original não libera o espaço, e o arquivo novo não caberia de volta.\n\nPare o servidor antes (é rapidinho) e siga.</string>
+    <string name="esp_parar">Parar o servidor e continuar</string>
+    <string name="ft_pendentes">↩ %1$d arquivo(s) esperando para voltar à pasta dos jogos. Toque aqui.</string>
+    <string name="ft_pendentes_titulo">Arquivos esperando</string>
+    <string name="ft_pendentes_ajuda">%1$d arquivo(s) já prontos e conferidos ficaram no lugar temporário porque não couberam na volta. Eles têm o nome final; nada se perdeu.\n\nTrazer agora? Se ainda faltar espaço, o app diz quanto e eles continuam esperando.</string>
+    <string name="ft_btn_trazer">Trazer de volta</string>
+    <string name="ft_trazidos">%1$d de %2$d arquivo(s) trazido(s) de volta.</string>
+    <string name="ft_volta_sem_espaco">%1$s ficou pronto, mas faltam %2$d MiB na pasta dos jogos para trazê-lo. Ele está em %3$s com o nome certo: libere espaço e toque em ↩ na aba Jogos.</string>
 </resources>

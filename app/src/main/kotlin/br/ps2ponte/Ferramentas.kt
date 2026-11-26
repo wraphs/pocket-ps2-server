@@ -9,6 +9,7 @@ import br.ps2ponte.core.ferramentas.IdJogo
 import br.ps2ponte.core.ferramentas.OrganizadorPs1
 import br.ps2ponte.core.ferramentas.Png8
 import br.ps2ponte.core.ferramentas.Tar
+import br.ps2ponte.core.ferramentas.Temporario
 import br.ps2ponte.core.ferramentas.Verificador
 import br.ps2ponte.core.fs.Comprimido
 import br.ps2ponte.core.fs.LocalFile
@@ -139,6 +140,7 @@ object Ferramentas {
         rodar(ctx, ctx.getString(R.string.ft_atualizando), silencioso = true) {
             val raiz = raizDe(ctx, pasta)
             var c = atualizarCatalogo(ctx, pasta, raiz)
+            pendentes(ctx, pasta) // arquivos esperando voltar de um volume temporário (a tela oferece trazer)
             val msgs = mutableListOf<String>()
             // Pendrive só leitura: mover e compactar jogos não dá (o art.tar vai para a pasta de apoio)
             val podeMexer = !soLeitura
@@ -210,6 +212,7 @@ object Ferramentas {
     fun depois(ctx: Context, pasta: String, raiz: VFile, mexeuNaArte: Boolean): String {
         val prefs = ctx.getSharedPreferences("ps2ponte", Context.MODE_PRIVATE)
         val c = atualizarCatalogo(ctx, pasta, raiz)
+        pendentes(ctx, pasta)
         if (mexeuNaArte && prefs.getBoolean(PREF_AUTO_TAR, false) && c.tarDesatualizado) {
             val r = empacotarArt(ctx, raiz)
             atualizarCatalogo(ctx, pasta, raiz)
@@ -223,7 +226,7 @@ object Ferramentas {
     val PASTAS_OPL = listOf("DVD", "CD", "ART", "CFG", "CHT", "LNG", "THM", "VMC", "POPS", "APPS")
     private const val LIMITE_CD = 700L * 1024 * 1024
 
-    class Jogo(val arquivo: VFile, val pasta: String) {
+    class Jogo(val arquivo: VFile, val pasta: String, val rel: String = arquivo.name) {
         val nome get() = arquivo.name
         val compactado get() = Comprimido.ehCompactado(nome)
         var id: String? = null
@@ -237,7 +240,7 @@ object Ferramentas {
         val arvore = LocalTree(raiz)
         return itens.mapNotNull { i ->
             val f = arvore.resolve(i.rel)?.takeIf { it.isFile } ?: return@mapNotNull null
-            Jogo(f, i.pasta).also { it.id = i.id }
+            Jogo(f, i.pasta, i.rel).also { it.id = i.id }
         }
     }
 
@@ -501,7 +504,7 @@ object Ferramentas {
         val lugares = ctx.getExternalFilesDirs(null).filterNotNull().mapNotNull { d ->
             val v = volumeDe(d.path) ?: return@mapNotNull null
             if (v.equals(meu, true)) return@mapNotNull null
-            Lugar(File(d, "temporario"), nomes[v] ?: nomes.entries.firstOrNull { it.key.equals(v, true) }?.value ?: v, d.usableSpace)
+            Lugar(pastaTemporaria(d, pasta), nomes[v] ?: nomes.entries.firstOrNull { it.key.equals(v, true) }?.value ?: v, d.usableSpace)
         }.sortedByDescending { it.livre }
         return Espaco(precisa, livre, lugares)
     }
@@ -510,35 +513,51 @@ object Ferramentas {
     private fun saida(temp: File?, pai: VFile, nome: String): VFile =
         if (temp != null) LocalFile.root(temp.apply { mkdirs() }).child(nome) else pai.child(nome)
 
-    /** Traz para a pasta do jogo o arquivo montado no lugar temporário (cópia com progresso) e apaga o temporário. */
-    private fun trazer(ctx: Context, tmp: VFile, pai: VFile, nomeFinal: String, temp: File) {
-        val parte = pai.child("$nomeFinal.part")
-        if (parte.exists()) parte.delete()
+    /** Pasta temporária desta pasta de jogos num volume (o nome identifica a pasta: as pendências voltam para ela). */
+    private fun pastaTemporaria(volume: File, pasta: String) = File(volume, "temporario/${Integer.toHexString(pasta.hashCode())}")
+
+    /** Destino relativo à pasta dos jogos de um arquivo [nome] ao lado de [j]. */
+    private fun relAoLado(j: Jogo, nome: String) = j.rel.substringBeforeLast('/', "").let { if (it.isEmpty()) nome else "$it/$nome" }
+
+    /** Traz o arquivo pronto do temporário, com mensagens que dizem a causa e onde o arquivo ficou. */
+    private fun trazerPronto(ctx: Context, pronto: VFile, destino: VFile) {
+        val livre = try { destino.parentFile?.usableSpace() ?: 0L } catch (e: Exception) { 0L }
         try {
-            tmp.open(false).use { e ->
-                parte.open(true).use { s ->
-                    s.setLength(0)
-                    val buf = ByteArray(1 shl 20)
-                    var pos = 0L
-                    val tam = e.length()
-                    while (pos < tam) {
-                        val n = e.readFully(pos, buf, 0, minOf(buf.size.toLong(), tam - pos).toInt())
-                        if (n <= 0) throw IOException("fim inesperado")
-                        s.write(pos, buf, 0, n)
-                        pos += n
-                        passo(pos, tam, ctx.getString(R.string.ft_trazendo, nomeFinal))
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            parte.delete()
-            // O arquivo pronto fica no lugar temporário: nada se perde
-            throw IOException(ctx.getString(R.string.ft_volta_falhou, nomeFinal, temp.path, e.message ?: ""))
+            Temporario.trazer(pronto, destino, livre) { f, t -> passo(f, t, ctx.getString(R.string.ft_trazendo, destino.name)) }
+        } catch (e: Temporario.SemEspaco) {
+            pendentesCache = -1
+            throw IOException(ctx.getString(R.string.ft_volta_sem_espaco, destino.name, e.faltam / (1024 * 1024), pronto.path))
+        } catch (e: IOException) {
+            pendentesCache = -1
+            throw IOException(ctx.getString(R.string.ft_volta_falhou, destino.name, pronto.path, e.message ?: e.javaClass.simpleName))
         }
-        val final = pai.child(nomeFinal)
-        if (final.exists()) final.delete()
-        if (!parte.renameTo(final)) throw IOException(ctx.getString(R.string.ft_nao_substituiu, nomeFinal))
-        tmp.delete()
+    }
+
+    /** Arquivos desta pasta de jogos esperando voltar de algum volume temporário. */
+    fun pendentes(ctx: Context, pasta: String): List<Pair<VFile, String>> =
+        ctx.getExternalFilesDirs(null).filterNotNull().flatMap { d ->
+            val dir = pastaTemporaria(d, pasta)
+            if (dir.isDirectory) Temporario.pendentes(LocalFile.root(dir)) else emptyList()
+        }.also { pendentesCache = it.size }
+
+    /** Quantos esperam voltar (da última conferência; -1 = conferir de novo). */
+    @Volatile var pendentesCache = -1
+
+    /** Traz de volta tudo o que ficou esperando; o que ainda não couber continua esperando. */
+    fun trazerPendentes(ctx: Context, pasta: String, raiz: VFile): String {
+        val lista = pendentes(ctx, pasta)
+        var trazidos = 0
+        val falhas = mutableListOf<String>()
+        for ((arq, rel) in lista) {
+            try {
+                trazerPronto(ctx, arq, Temporario.destinoEm(raiz, rel))
+                trazidos++
+            } catch (e: IOException) {
+                falhas += e.message ?: rel
+            }
+        }
+        pendentes(ctx, pasta)
+        return (listOf(ctx.getString(R.string.ft_trazidos, trazidos, lista.size)) + falhas).joinToString("\n")
     }
 
     // ------------------------------------------------------------------ compactar
@@ -576,9 +595,10 @@ object Ferramentas {
             conferir(f, tmp)
             val original = f.length()
             if (temp != null) {
-                // Primeiro libera o espaço da ISO, depois traz o ZSO conferido
+                // Conferido: ganha o nome final e a anotação do destino no temporário; libera a ISO e traz o ZSO
+                val pronto = Temporario.marcar(tmp, "$nome.zso", relAoLado(j, "$nome.zso"))
                 if (apagarOriginal && !f.delete()) throw IOException(ctx.getString(R.string.ft_nao_substituiu, f.name))
-                trazer(ctx, tmp, pai, "$nome.zso", temp)
+                trazerPronto(ctx, pronto, pai.child("$nome.zso"))
             } else {
                 val final = pai.child("$nome.zso")
                 if (final.exists()) final.delete()
@@ -627,8 +647,9 @@ object Ferramentas {
                 throw e
             }
             if (temp != null) {
+                val pronto = Temporario.marcar(tmp, "$nome.iso", relAoLado(j, "$nome.iso"))
                 if (apagarOriginal && !f.delete()) throw IOException(ctx.getString(R.string.ft_nao_substituiu, f.name))
-                trazer(ctx, tmp, pai, "$nome.iso", temp)
+                trazerPronto(ctx, pronto, pai.child("$nome.iso"))
             } else {
                 val final = pai.child("$nome.iso")
                 if (final.exists()) final.delete()

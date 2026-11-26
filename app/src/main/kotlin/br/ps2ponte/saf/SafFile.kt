@@ -28,7 +28,8 @@ class SafRaiz(context: Context, val treeUri: Uri) {
     private val geracao = AtomicLong()
 
     fun gen() = geracao.get()
-    fun mudou() { geracao.incrementAndGet() }
+    // Também esquece o espaço livre guardado: depois de apagar um jogo, a conta tem que ver o espaço liberado
+    fun mudou() { geracao.incrementAndGet(); espacoQuando = 0L }
 
     fun docUri(docId: String): Uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
     fun childrenUri(docId: String): Uri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, docId)
