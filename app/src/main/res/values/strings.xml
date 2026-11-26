@@ -7,13 +7,8 @@
     <string name="ajuda">Help: %1$s</string>
 
     <!-- Status -->
-    <string name="st_parado">Stopped</string>
-    <string name="st_pronto">Ready — tap Start</string>
-    <string name="st_sem_cabo">No network on the cable</string>
     <string name="st_sem_cabo_dica">Plug in the hub/adapter and turn on Ethernet tethering. You can still start: the servers listen on every network.</string>
-    <string name="st_escolha_pasta">Choose where the games are (step 2)</string>
     <string name="st_iniciando">Starting…</string>
-    <string name="st_servindo">Serving games</string>
     <string name="st_esperando_ps2">Waiting for the PS2… open OPL / NHDDL / Neutrino on the console.</string>
     <string name="st_ultimo_pedido">PS2 %1$s · last request %2$s ago</string>
     <string name="velocidade">%1$.2f MB/s · %2$.1f MB transferred</string>
@@ -21,12 +16,7 @@
     <string name="btn_parar">■  Stop</string>
 
     <!-- 1 · Cable -->
-    <string name="sec_rede">1 · Cable</string>
-    <string name="rede_ok">✔ Phone %1$s · PS2 suggestion %2$s</string>
-    <string name="rede_nenhuma">⚠ No network on the cable</string>
     <string name="btn_ancoragem">Tethering</string>
-    <string name="ajuda_rede_titulo">Cable network</string>
-    <string name="ajuda_rede">Phone → USB-C hub/adapter with an Ethernet port → network cable → PS2.\n\nTurn on Settings › Network › Hotspot &amp; tethering › Ethernet tethering. The phone then hands out an IP on the cable.\n\nPhone IP: %1$s\nOn the PS2: DHCP (OPL) or IP %2$s, mask 255.255.255.0.\n\nNo Ethernet tethering option? Some phones only have it on Android 11+ or custom ROMs (e.g. LineageOS). If the adapter is not recognized at all, try a powered hub.</string>
 
     <!-- Permissions -->
     <string name="btn_perm_arquivos">Allow file access</string>
@@ -35,19 +25,12 @@
     <string name="perm_bateria">Battery › Unrestricted</string>
 
     <!-- 2 · Games -->
-    <string name="sec_jogos">2 · Games</string>
-    <string name="ajuda_jogos_titulo">Where the games come from</string>
-    <string name="ajuda_jogos">Folder: a folder on the phone or the root of a USB drive (exFAT, FAT32 or NTFS) with DVD/, CD/, ART/… Works with SMB1, UDPFS and UDPBD (UDPBD sees the folder as a virtual exFAT disk).\n\nWhole USB drive (advanced): the app reads the drive directly over USB (must be exFAT or FAT32). Only UDPBD and UDPFS in block mode. Eject the drive in Settings › Storage before starting; after stopping, unplug and plug it back.</string>
-    <string name="modo_pasta">Folder</string>
-    <string name="modo_usb">Whole USB drive (advanced)</string>
-    <string name="acesso">Access:</string>
     <string name="acesso_normal">Normal</string>
     <string name="acesso_root">Root</string>
     <string name="acesso_shizuku">Shizuku</string>
     <string name="ajuda_acesso_titulo">File access</string>
     <string name="ajuda_acesso">Normal: Android permissions. Since Android 11 the folder picker refuses the root of the internal storage — use the "Internal storage" button instead (it uses "all files access"). USB drives go through the picker, which is slower.\n\nRoot: reads any path (including /mnt/media_rw, the USB drive without the picker, faster). Needs Magisk/KernelSU; allow the app when asked.\n\nShizuku: like root, without root. Install and start the Shizuku app (wireless debugging or ADB), then pick Shizuku here and allow it.</string>
     <string name="pasta_nenhuma">Choose the games folder:</string>
-    <string name="pasta_ok">✔ ready</string>
     <string name="pasta_sem_dvd">⚠ no DVD/ or CD/ folder</string>
     <string name="pasta_nao_abriu">⚠ couldn\'t open; choose again</string>
     <string name="pasta_sem_perm">⚠ file access permission missing</string>
@@ -62,20 +45,12 @@
     <string name="btn_criar_opl">Create OPL folders (DVD, CD, ART…)</string>
     <string name="opl_criadas">Folders created. Put the .iso files in DVD (or CD).</string>
     <string name="usb_nenhum">No USB drive/HDD found.</string>
-    <string name="btn_procurar">Search again</string>
     <string name="caminho_titulo">Folder path</string>
 
     <!-- 3 · PS2 -->
-    <string name="sec_ps2">3 · On the PS2</string>
-    <string name="btn_config_ps2">How to set up the PS2</string>
-    <string name="servidores">Servers</string>
-    <string name="srv_smb">SMB1/SMB2 · OPL, RiptOPL (TCP 1445)</string>
-    <string name="srv_udpfs">UDPFS · NHDDL, Neutrino, RiptOPL</string>
-    <string name="srv_udpbd">UDPBD · Neutrino, XEB+, RiptOPL</string>
     <string name="ajuda_smb">OPL / RiptOPL › Network Settings:\n• IP: static %2$s (see PS2 network)\n• Address: %1$s\n• Port: %3$d\n• Share: PS2SMB · User: guest · Password: empty\n• ETH Start Mode: Auto; save and restart OPL.\n\nRiptOPL with SMB2: same port and share; any user and password. The app answers SMB1 and SMB2 on the same port.</string>
     <string name="ajuda_udpfs">Faster than SMB. Serves the folder (and the virtual disk).\n\nNHDDL: nhddl.yaml with\n  mode: udpfs\n  udpfs_ip: %1$s\nNeutrino: config/bsd-udpfs.toml → args = ["ip=%1$s"]\nRiptOPL: use the same PS2 IP as in the network settings.</string>
     <string name="ajuda_udpbd">Block device: the PS2 sees an exFAT disk (the folder as a virtual disk, or the whole USB drive).\n\nNeutrino: config/bsd-udpbd.toml → args = ["ip=%1$s"]\nRiptOPL / XEB+: UDPBD device, with PS2 IP %1$s.</string>
-    <string name="config_ps2_titulo">PS2 setup</string>
 
     <!-- Log -->
     <string name="sec_log">Log</string>
@@ -84,19 +59,15 @@
     <string name="log_copiado">Log copied</string>
 
     <!-- Toasts -->
-    <string name="av_marque_servidor">Select at least one server</string>
     <string name="av_escolha_pasta">Choose a folder first</string>
     <string name="av_saf_de_novo">Tap the USB drive again to allow access</string>
     <string name="av_perm_arquivos">Allow file access first</string>
-    <string name="av_escolha_usb">Choose a USB drive/HDD</string>
     <string name="av_usb_desconectado">USB drive disconnected</string>
     <string name="av_usb_sem_perm">No permission to use the USB drive</string>
     <string name="av_nao_e_armazenamento">That folder isn\'t on the phone or USB drive storage</string>
     <string name="av_saf_sem_persistir">Android didn\'t grant permanent access to this folder</string>
     <string name="av_seletor_falhou">Couldn\'t open the folder picker</string>
     <string name="av_abra_config">Open Settings › Apps › %1$s › %2$s</string>
-    <string name="av_pasta_nao_abriu">Couldn\'t open the folder: %1$s</string>
-    <string name="av_aguarde_pasta">Still checking the folder, try again in a moment</string>
     <string name="shizuku_parado">Shizuku isn\'t running. Open the Shizuku app and start it.</string>
     <string name="shizuku_negado">Shizuku permission denied</string>
 
@@ -135,40 +106,22 @@
     <string name="dica_sem_ps2">⚠ No sign of the PS2 after %1$d s. Check:\n  • the PS2 IP is in the same network as the phone (e.g. %3$s, mask 255.255.255.0) or uses DHCP;\n  • the server address on the PS2 is %2$s;\n  • the green/orange LED of the network port lights up on the hub;\n  • the loader uses the right protocol (OPL → SMB, NHDDL/Neutrino → UDPFS/UDPBD).</string>
     <string name="dica_outra_rede">⚠ The PS2 (%1$s) is not on the cable network (%2$s). Its IP should look like %3$s; replies may go out through Wi-Fi.</string>
     <string name="dica_bateria">⚠ Android may pause the server with the screen off. Tap \"Let it run in the background\".</string>
-    <string name="aba_servidor">▶ Server</string>
-    <string name="aba_ferramentas">🎮 Games</string>
-    <string name="sec_avancado">⚙ Advanced</string>
-    <string name="av_modo">Where the games come from:</string>
-    <string name="btn_trocar_pasta">Change folder…</string>
+    <string name="aba_servidor">▶  Server</string>
+    <string name="aba_ferramentas">🎮  Games</string>
     <string name="btn_fechar_escolha">Close</string>
     <string name="op_descompactar">Serve ZSO/CSO as ISO</string>
     <string name="ajuda_descompactar">Games in .zso and .cso show up to the PS2 as plain .iso, decompressed on the fly by the phone.\n\nThis lets NHDDL/Neutrino (UDPFS and UDPBD) run compressed games, which take much less space.\n\nOver SMB the .zso goes as is, since OPL reads ZSO by itself and the cable carries fewer bytes. The .cso becomes .iso over SMB too.\n\nIf an .iso with the same name exists, the compressed one is hidden.</string>
-    <string name="ft_sec_pasta">OPL folder</string>
-    <string name="ft_ajuda_pasta">The game list updates by itself every time you open the app: it looks for PS2 (.iso, .zso, .cso) and PS1 (.VCD and .cue) games in the whole folder and reads each game code. Only new or changed files are read again.\n\nOrganize: creates the OPL folders, moves PS2 games into DVD/ (over 700 MB) or CD/ and PS1 games into POPS/ or EMBER/games/, setting up multi-disc. It shows everything before doing it.</string>
     <string name="ft_sem_pasta_escolhida">Choose the games folder on the Server tab.</string>
     <string name="ft_btn_organizar">Organize the folder</string>
-    <string name="ft_sec_capas">Covers</string>
-    <string name="ft_ajuda_capas">Download: looks up the cover of each game without one by its code (xlenore/ps2-covers database, needs internet on the phone) and saves it as ART/&lt;code>_COV.png.\n\nConvert: turns JPG/WebP/BMP/PNG in the ART folder into 8-bit PNG (256 colors), the format OPL and RiptOPL read without errors and load faster.\n\nSize: 140×200 is the OPL standard; 280×400 is the RiptOPL standard.</string>
     <string name="ft_capa_opl">140×200 (OPL)</string>
     <string name="ft_capa_ript">280×400 (RiptOPL)</string>
-    <string name="ft_btn_baixar_capas">Download missing covers</string>
     <string name="ft_btn_corrigir">Convert covers to 8-bit PNG</string>
     <string name="ft_btn_tar">Pack ART/art.tar</string>
     <string name="ft_ajuda_tar">Packs every PNG in the ART folder into one file, ART/art.tar (uncompressed). RiptOPL reads covers from it much faster than from hundreds of loose files (turn it on in Interface › Artwork Settings). The loose files stay, for regular OPL.\n\nRedo it after downloading new covers.</string>
-    <string name="ft_sec_compactar">Compress games</string>
-    <string name="ft_ajuda_compactar">Compress: ISO → ZSO (LZ4), which takes less space. OPL reads ZSO directly; for NHDDL/Neutrino the app decompresses on the fly (\"Serve ZSO/CSO as ISO\" in Advanced). Before anything is deleted, the new ZSO is checked against the ISO.\n\nDecompress: ZSO/CSO → ISO.\n\nIt may take a few minutes per game on a slower phone; you can use other apps meanwhile.</string>
     <string name="ft_btn_compactar">Compress ISO → ZSO…</string>
     <string name="ft_btn_descompactar">Decompress ZSO/CSO → ISO…</string>
-    <string name="ft_conf_compactar">Compress %1$d game(s). Once checked, delete the original ISO to free space?</string>
-    <string name="ft_conf_descompactar">Decompress %1$d game(s). Afterwards, delete the compressed file?</string>
-    <string name="ft_manter">Keep originals</string>
-    <string name="ft_apagar">Delete originals</string>
-    <string name="ft_nada_compactar">No ISO in DVD/ or CD/.</string>
-    <string name="ft_nada_descompactar">No ZSO/CSO in DVD/ or CD/.</string>
     <string name="ft_lendo">Reading the games…</string>
-    <string name="ft_nenhum_jogo">No games in DVD/ or CD/.</string>
     <string name="ft_sem_codigo">no code</string>
-    <string name="ft_legenda">🖼 = has cover   ▫ = no cover   📁 = outside DVD/CD (the PS2 cannot see it)</string>
     <string name="ft_cancelado">%1$s: cancelled.</string>
     <string name="ft_erro">%1$s: error — %2$s</string>
     <string name="ft_sem_pasta">folder %1$s not found</string>
@@ -187,26 +140,20 @@
     <string name="ft_sem_espaco">not enough free space for %1$s</string>
     <string name="ft_compactados">%1$d game(s) compressed; %2$.0f MiB saved.</string>
     <string name="ft_descompactados">%1$d game(s) decompressed.</string>
-    <string name="srv_http">HTTP · RiptOPL (TCP 1100)</string>
     <string name="ajuda_http">RiptOPL › Network Settings:\n• Protocol: HTTP\n• Address: %1$s\n• Port: 1100 (always fill it in: with 0 the loader uses different ports for the list and for the game)\n• Base path: / (or blank)\n\nUses TCP: no lost packets on cheap hubs, unlike UDP. Read-only: no VMC over HTTP. Dual-layer DVD9 may not work because of a loader limit.</string>
     <string name="op_http_antigo">List for the older OPL-HTTP</string>
     <string name="ajuda_http_antigo">RiptOPL and Docmine17\'s OPL-HTTP read games.csv in different formats, and the server cannot tell which one is on the other end.\n\nLeave it off for RiptOPL. Turn it on only for Docmine17\'s OPL-HTTP: the list then uses the simple format (up to ~200 games, no commas in names) and ZSO goes compressed.</string>
-    <string name="srv_nfs">NFS · Neutrino, RiptOPL (TCP 2049)</string>
     <string name="ajuda_nfs">Neutrino (nfs: driver) and RiptOPL › NFS:\n• Server: %1$s\n• Port: 2049\n• Export: / (or /ps2)\n\nUses TCP, like HTTP: sturdier on cheap hubs. Neutrino only reads DVDs over NFS; RiptOPL also writes VMCs (the file must already exist).</string>
-    <string name="ft_btn_atualizar">Refresh the list now</string>
-    <string name="ft_resumo">%1$d PS2 game(s) · %2$d PS1 · %3$d without cover · %4$d uncompressed ISO</string>
+    <string name="ft_btn_atualizar">Refresh list, covers and info now</string>
     <string name="ft_resumo_vazio">Game list not built yet.</string>
     <string name="ft_resumo_fora">📁 %1$d outside DVD/ and CD/ (the PS2 cannot see them): use Organize.</string>
-    <string name="ft_resumo_tar">ART/art.tar out of date.</string>
     <string name="ft_sw_auto_tar">Rebuild art.tar automatically when covers change</string>
-    <string name="ft_sw_auto_zso">Compress new ISOs automatically (deletes the ISO after checking the ZSO; only while the server is stopped)</string>
     <string name="ft_lista_ok">Game list updated.</string>
     <string name="ft_lendo_jogo">Reading %1$s</string>
     <string name="ft_atualizando">Updating the game list</string>
     <string name="ft_auto_zso">Automatic compression:</string>
     <string name="ft_auto_tar">Automatic art.tar:</string>
     <string name="ft_btn_verificar">Check loader files</string>
-    <string name="ft_ajuda_verificar">Checks that the folder has the files each loader needs:\n• POPStarter (PS1): POPS.ELF, IOPRP252.IMG, POPS_IOX.PAK, POPSTARTER.ELF\n• Ember (PS1): ember.elf and the 512 KiB bios.bin\n• Neutrino: modules and config (when NHDDL loads over the network)\n• OPL: DVD, CD, ART, CFG, VMC folders\n\nIt checks presence, size and whether ELFs are valid. Sony files (POPS and BIOS) do not come with the app: use your own.</string>
     <string name="ft_verif_nada">Nothing to check yet (no POPS/, EMBER/ or NEUTRINO/).</string>
     <string name="ft_verif_legenda">✓ ok   ✗ missing   ⚠ wrong file   ○ optional</string>
     <string name="ft_ps1_destino">PS1 games go to:</string>
@@ -223,15 +170,11 @@
     <string name="ft_org_conversao">🔄 %1$d conversion(s), %2$.1f GB to process. It may take a few minutes.</string>
     <string name="ft_so_leitura">🔒 Read-only drive (Android mounts NTFS like this). Covers, art.tar, OPL settings and saves (VMC) go to a support folder on the phone, and the PS2 and this tab see everything together. Moving, compressing and converting games needs an exFAT drive.</string>
     <string name="jg_buscar">Search games…</string>
-    <string name="jg_ferramentas">Tools</string>
     <string name="jg_nenhum">No games found. Copy .iso (PS2) or .VCD/.cue (PS1) files to the folder and tap ⚙ › Refresh.</string>
     <string name="jg_codigo">Code: %1$s</string>
     <string name="jg_fora_lugar">📁 Misplaced: the PS2 cannot see this game. Use Organize.</string>
-    <string name="jg_sem_capa">No cover.</string>
     <string name="jg_compactar">Compress (ZSO)</string>
     <string name="jg_descompactar">Decompress (ISO)</string>
-    <string name="jg_baixar_capa">Download cover</string>
-    <string name="est_titulo">Look (experimental)</string>
     <string name="est_compacto">Compact: smaller, flat buttons</string>
     <string name="est_mini">Mini: densest, small covers</string>
     <string name="est_lista">List: compact, games as a list</string>
@@ -240,7 +183,6 @@
     <string name="ft_apoio_onde">Support folder: %1$s (removed if the app is uninstalled).</string>
     <string name="jg_log">Games log</string>
     <string name="jg_log_vazio">Nothing here yet.</string>
-    <string name="cfg_rede_titulo">PS2 network (for all of them)</string>
     <string name="cfg_rede">• IP Address Type: Static\n• IP Address: %1$s\n• Mask: 255.255.255.0\n• Gateway: %2$s\n• DNS: %2$s\n\nUse a static IP: tethering DHCP disappears for a few seconds whenever the cable glitches (error 311 on the PS2). And the IP must be on the cable network: otherwise only UDPFS/UDPBD work; SMB, NFS and HTTP do not answer.</string>
     <string name="st_outra_rede">⚠ The PS2 has an IP from another network (%1$s). Only UDPFS/UDPBD work like this; SMB, NFS and HTTP do not. On the PS2: static IP %2$s, mask 255.255.255.0, gateway and DNS %3$s.</string>
     <string name="esp_titulo">Low on space</string>
@@ -258,4 +200,30 @@
     <string name="ft_btn_trazer">Bring back</string>
     <string name="ft_trazidos">%1$d of %2$d file(s) brought back.</string>
     <string name="ft_volta_sem_espaco">%1$s is ready, but the games folder is %2$d MiB short to bring it back. It is in %3$s with the right name: free some space and tap ↩ on the Games tab.</string>
+    <string name="cfg_titulo">Settings</string>
+    <string name="cfg_sec_aparencia">Look</string>
+    <string name="cfg_sec_jogos">Games and covers</string>
+    <string name="cfg_sec_ferramentas">Tools</string>
+    <string name="cfg_sec_servidor">Server</string>
+    <string name="cfg_sec_acesso">File access</string>
+    <string name="cfg_capa_tam">Size of downloaded covers:</string>
+    <string name="prot_titulo">PROTOCOL</string>
+    <string name="prot_pare_antes">Stop the server before changing it.</string>
+    <string name="ps2_titulo">On the PS2 › Network settings</string>
+    <string name="hint_sem_cabo">Nothing on the cable. Plug the hub into the phone and the cable into the PS2, and check that Ethernet tethering is on.</string>
+    <string name="hint_sem_pasta">Choose where the games are on the Games tab.</string>
+    <string name="hint_prot_pasta">With a whole USB drive, only UDPFS and UDPBD work. Pick one of them or use a folder.</string>
+    <string name="btn_ir_jogos">Go to Games</string>
+    <string name="ip_celular">phone-IP</string>
+    <string name="ip_ps2">PS2-IP</string>
+    <string name="jg_local_titulo">Where the games are</string>
+    <string name="jg_escolher">Tap to choose…</string>
+    <string name="jg_usb_modo">🔌 Whole USB drive: %1$s</string>
+    <string name="jg_usb_ajuda">The PS2 reads the drive directly (UDPFS/UDPBD). The game list is not shown in this mode.</string>
+    <string name="jg_opcao_usb">🔌 Whole USB drive (block mode): %1$s</string>
+    <string name="jg_resumo">%1$d PS2 · %2$d PS1</string>
+    <string name="jg_escolha_local">Tap \"Where the games are\" and choose the folder (phone, SD card or USB drive).</string>
+    <string name="log_vazio">The log shows up here when the server starts.</string>
+    <string name="ft_arte">Updating covers and game info</string>
+    <string name="ft_arte_ok">Art: %1$d image(s) and %2$d game info file(s) downloaded.</string>
 </resources>

@@ -6,13 +6,8 @@
     <string name="ajuda">Ajuda: %1$s</string>
 
     <!-- Status -->
-    <string name="st_parado">Parado</string>
-    <string name="st_pronto">Tudo pronto — toque em Iniciar</string>
-    <string name="st_sem_cabo">Sem rede pelo cabo</string>
     <string name="st_sem_cabo_dica">Ligue o hub/adaptador e ative a Ancoragem Ethernet. Dá para iniciar assim mesmo: os servidores escutam em todas as redes.</string>
-    <string name="st_escolha_pasta">Escolha onde estão os jogos (passo 2)</string>
     <string name="st_iniciando">Iniciando…</string>
-    <string name="st_servindo">Servindo jogos</string>
     <string name="st_esperando_ps2">Esperando o PS2… abra o OPL / NHDDL / Neutrino no console.</string>
     <string name="st_ultimo_pedido">PS2 %1$s · último pedido há %2$s</string>
     <string name="velocidade">%1$.2f MB/s · %2$.1f MB transferidos</string>
@@ -20,12 +15,7 @@
     <string name="btn_parar">■  Parar</string>
 
     <!-- 1 · Cabo -->
-    <string name="sec_rede">1 · Cabo</string>
-    <string name="rede_ok">✔ Celular %1$s · sugestão p/ PS2 %2$s</string>
-    <string name="rede_nenhuma">⚠ Sem rede pelo cabo</string>
     <string name="btn_ancoragem">Ancoragem</string>
-    <string name="ajuda_rede_titulo">Rede pelo cabo</string>
-    <string name="ajuda_rede">Celular → hub/adaptador USB-C com porta de rede → cabo de rede → PS2.\n\nAtive em Configurações › Conexões › Roteador Wi-Fi e ancoragem › Ancoragem Ethernet. O celular passa a dar IP pelo cabo.\n\nIP do celular: %1$s\nNo PS2: DHCP (OPL) ou IP %2$s, máscara 255.255.255.0.\n\nSem a opção de Ancoragem Ethernet? Alguns celulares só têm no Android 11+ ou em ROMs como a LineageOS. Se o adaptador nem é reconhecido, tente um hub com fonte.</string>
 
     <!-- Permissões -->
     <string name="btn_perm_arquivos">Permitir acesso aos arquivos</string>
@@ -34,19 +24,12 @@
     <string name="perm_bateria">Bateria › Sem restrições</string>
 
     <!-- 2 · Jogos -->
-    <string name="sec_jogos">2 · Jogos</string>
-    <string name="ajuda_jogos_titulo">De onde vêm os jogos</string>
-    <string name="ajuda_jogos">Pasta: uma pasta do celular ou a raiz do pendrive (exFAT, FAT32 ou NTFS) com DVD/, CD/, ART/… Funciona com SMB1, UDPFS e UDPBD (o UDPBD vê a pasta como um disco exFAT virtual).\n\nPendrive inteiro (avançado): o app lê o pendrive direto pelo USB (precisa estar em exFAT ou FAT32). Só UDPBD e UDPFS em modo bloco. Ejete o pendrive em Configurações › Armazenamento antes de iniciar; depois de parar, desconecte e reconecte.</string>
-    <string name="modo_pasta">Pasta</string>
-    <string name="modo_usb">Pendrive inteiro (avançado)</string>
-    <string name="acesso">Acesso:</string>
     <string name="acesso_normal">Normal</string>
     <string name="acesso_root">Root</string>
     <string name="acesso_shizuku">Shizuku</string>
     <string name="ajuda_acesso_titulo">Acesso aos arquivos</string>
     <string name="ajuda_acesso">Normal: permissões do Android. Desde o Android 11 o seletor de pastas recusa a raiz do armazenamento interno — use o botão "Armazenamento interno" (ele usa o "acesso a todos os arquivos"). Pendrives passam pelo seletor, que é mais lento.\n\nRoot: lê qualquer caminho (inclusive /mnt/media_rw, o pendrive sem o seletor, mais rápido). Precisa de Magisk/KernelSU; permita o app quando perguntar.\n\nShizuku: igual ao root, sem root. Instale e inicie o app Shizuku (depuração sem fio ou ADB), depois escolha Shizuku aqui e permita.</string>
     <string name="pasta_nenhuma">Escolha a pasta dos jogos:</string>
-    <string name="pasta_ok">✔ pronta</string>
     <string name="pasta_sem_dvd">⚠ sem pasta DVD/ ou CD/</string>
     <string name="pasta_nao_abriu">⚠ não abriu; escolha de novo</string>
     <string name="pasta_sem_perm">⚠ falta a permissão de arquivos</string>
@@ -61,20 +44,12 @@
     <string name="btn_criar_opl">Criar pastas do OPL (DVD, CD, ART…)</string>
     <string name="opl_criadas">Pastas criadas. Coloque os .iso em DVD (ou CD).</string>
     <string name="usb_nenhum">Nenhum pendrive/HD USB encontrado.</string>
-    <string name="btn_procurar">Procurar de novo</string>
     <string name="caminho_titulo">Caminho da pasta</string>
 
     <!-- 3 · PS2 -->
-    <string name="sec_ps2">3 · No PS2</string>
-    <string name="btn_config_ps2">Como configurar o PS2</string>
-    <string name="servidores">Servidores</string>
-    <string name="srv_smb">SMB1/SMB2 · OPL, RiptOPL (TCP 1445)</string>
-    <string name="srv_udpfs">UDPFS · NHDDL, Neutrino, RiptOPL</string>
-    <string name="srv_udpbd">UDPBD · Neutrino, XEB+, RiptOPL</string>
     <string name="ajuda_smb">OPL / RiptOPL › Network Settings:\n• IP: fixo %2$s (veja Rede do PS2)\n• Address: %1$s\n• Port: %3$d\n• Share: PS2SMB · User: guest · Password: vazio\n• ETH Start Mode: Auto; salve e reinicie o OPL.\n\nRiptOPL com SMB2: mesma porta e mesmo compartilhamento; qualquer usuário e senha. O app responde SMB1 e SMB2 na mesma porta.</string>
     <string name="ajuda_udpfs">Mais rápido que o SMB. Serve a pasta (e o disco virtual).\n\nNHDDL: nhddl.yaml com\n  mode: udpfs\n  udpfs_ip: %1$s\nNeutrino: config/bsd-udpfs.toml → args = ["ip=%1$s"]\nRiptOPL: use o mesmo IP do PS2 das configurações de rede.</string>
     <string name="ajuda_udpbd">Bloco: o PS2 vê um disco exFAT (a pasta como disco virtual, ou o pendrive inteiro).\n\nNeutrino: config/bsd-udpbd.toml → args = ["ip=%1$s"]\nRiptOPL / XEB+: dispositivo UDPBD, com o IP do PS2 %1$s.</string>
-    <string name="config_ps2_titulo">Configurar o PS2</string>
 
     <!-- Log -->
     <string name="sec_log">Log</string>
@@ -83,19 +58,15 @@
     <string name="log_copiado">Log copiado</string>
 
     <!-- Avisos -->
-    <string name="av_marque_servidor">Marque pelo menos um servidor</string>
     <string name="av_escolha_pasta">Escolha uma pasta primeiro</string>
     <string name="av_saf_de_novo">Toque de novo no pendrive para liberar o acesso</string>
     <string name="av_perm_arquivos">Permita o acesso aos arquivos primeiro</string>
-    <string name="av_escolha_usb">Escolha um pendrive/HD</string>
     <string name="av_usb_desconectado">Pendrive desconectado</string>
     <string name="av_usb_sem_perm">Sem permissão para usar o pendrive</string>
     <string name="av_nao_e_armazenamento">Essa pasta não é do armazenamento do celular/pendrive</string>
     <string name="av_saf_sem_persistir">O Android não liberou o acesso permanente a essa pasta</string>
     <string name="av_seletor_falhou">Não consegui abrir o seletor de pastas</string>
     <string name="av_abra_config">Abra Configurações › Apps › %1$s › %2$s</string>
-    <string name="av_pasta_nao_abriu">Não consegui abrir a pasta: %1$s</string>
-    <string name="av_aguarde_pasta">Ainda verificando a pasta, tente de novo em instantes</string>
     <string name="shizuku_parado">O Shizuku não está rodando. Abra o app Shizuku e inicie o serviço.</string>
     <string name="shizuku_negado">O Shizuku não liberou o acesso</string>
 
@@ -134,40 +105,22 @@
     <string name="dica_sem_ps2">⚠ Nenhum sinal do PS2 depois de %1$d s. Confira:\n  • o IP do PS2 está na mesma rede do celular (ex.: %3$s, máscara 255.255.255.0) ou usa DHCP;\n  • o endereço do servidor no PS2 é %2$s;\n  • o LED verde/laranja da porta de rede acende no hub;\n  • o loader usa o protocolo certo (OPL → SMB, NHDDL/Neutrino → UDPFS/UDPBD).</string>
     <string name="dica_outra_rede">⚠ O PS2 (%1$s) não está na rede do cabo (%2$s). O IP dele deveria ser parecido com %3$s; as respostas podem sair pelo Wi-Fi.</string>
     <string name="dica_bateria">⚠ O Android pode pausar o servidor com a tela apagada. Toque em \"Deixar rodar em segundo plano\".</string>
-    <string name="aba_servidor">▶ Servidor</string>
-    <string name="aba_ferramentas">🎮 Jogos</string>
-    <string name="sec_avancado">⚙ Avançado</string>
-    <string name="av_modo">De onde vêm os jogos:</string>
-    <string name="btn_trocar_pasta">Trocar a pasta…</string>
+    <string name="aba_servidor">▶  Servidor</string>
+    <string name="aba_ferramentas">🎮  Jogos</string>
     <string name="btn_fechar_escolha">Fechar</string>
     <string name="op_descompactar">Servir ZSO/CSO como ISO</string>
     <string name="ajuda_descompactar">Jogos .zso e .cso aparecem para o PS2 como .iso normais, descompactados na hora pelo celular.\n\nAssim o NHDDL/Neutrino (UDPFS e UDPBD) roda jogos compactados, que ocupam bem menos espaço.\n\nNo SMB o .zso continua indo como está, porque o OPL já lê ZSO sozinho e o cabo leva menos bytes. O .cso vira .iso também no SMB.\n\nSe já existir um .iso com o mesmo nome, o compactado fica escondido.</string>
-    <string name="ft_sec_pasta">Pasta do OPL</string>
-    <string name="ft_ajuda_pasta">A lista de jogos se atualiza sozinha toda vez que você abre o app: procura PS2 (.iso, .zso, .cso) e PS1 (.VCD e .cue) na pasta inteira e lê o código de cada jogo. Só arquivos novos ou alterados são lidos de novo.\n\nOrganizar: cria as pastas do OPL, leva os jogos de PS2 para DVD/ (mais de 700 MB) ou CD/ e os de PS1 para POPS/ ou EMBER/games/, arrumando o multidisco. Mostra tudo antes de fazer.</string>
     <string name="ft_sem_pasta_escolhida">Escolha a pasta dos jogos na aba Servidor.</string>
     <string name="ft_btn_organizar">Organizar a pasta</string>
-    <string name="ft_sec_capas">Capas</string>
-    <string name="ft_ajuda_capas">Baixar: procura a capa de cada jogo sem capa pelo código (banco xlenore/ps2-covers, precisa de internet no celular) e grava em ART/&lt;código>_COV.png.\n\nConverter: transforma JPG/WebP/BMP/PNG da pasta ART em PNG de 8 bits (256 cores), o formato que o OPL e o RiptOPL leem sem erro e que carrega mais rápido.\n\nTamanho: 140×200 é o padrão do OPL; 280×400 é o padrão do RiptOPL.</string>
     <string name="ft_capa_opl">140×200 (OPL)</string>
     <string name="ft_capa_ript">280×400 (RiptOPL)</string>
-    <string name="ft_btn_baixar_capas">Baixar capas que faltam</string>
     <string name="ft_btn_corrigir">Converter capas para PNG 8-bit</string>
     <string name="ft_btn_tar">Empacotar ART/art.tar</string>
     <string name="ft_ajuda_tar">Junta todas as imagens PNG da pasta ART num só arquivo ART/art.tar (sem compactação). O RiptOPL lê as capas desse arquivo muito mais rápido que de centenas de arquivos soltos (ative em Interface › Artwork Settings). Os arquivos soltos continuam lá, para o OPL comum.\n\nRefaça depois de baixar capas novas.</string>
-    <string name="ft_sec_compactar">Compactar jogos</string>
-    <string name="ft_ajuda_compactar">Compactar: ISO → ZSO (LZ4), que ocupa menos espaço. O OPL lê ZSO direto; para o NHDDL/Neutrino o app descompacta na hora (opção \"Servir ZSO/CSO como ISO\" no Avançado). Antes de apagar qualquer coisa, o ZSO novo é conferido com a ISO.\n\nDescompactar: ZSO/CSO → ISO.\n\nPode demorar alguns minutos por jogo em celular mais fraco; dá para usar outros apps enquanto isso.</string>
     <string name="ft_btn_compactar">Compactar ISO → ZSO…</string>
     <string name="ft_btn_descompactar">Descompactar ZSO/CSO → ISO…</string>
-    <string name="ft_conf_compactar">Compactar %1$d jogo(s). Depois de conferido, apagar a ISO original para liberar espaço?</string>
-    <string name="ft_conf_descompactar">Descompactar %1$d jogo(s). Depois, apagar o arquivo compactado?</string>
-    <string name="ft_manter">Manter originais</string>
-    <string name="ft_apagar">Apagar originais</string>
-    <string name="ft_nada_compactar">Nenhuma ISO em DVD/ ou CD/.</string>
-    <string name="ft_nada_descompactar">Nenhum ZSO/CSO em DVD/ ou CD/.</string>
     <string name="ft_lendo">Lendo os jogos…</string>
-    <string name="ft_nenhum_jogo">Nenhum jogo em DVD/ ou CD/.</string>
     <string name="ft_sem_codigo">sem código</string>
-    <string name="ft_legenda">🖼 = tem capa   ▫ = sem capa   📁 = fora de DVD/CD (o PS2 não vê)</string>
     <string name="ft_cancelado">%1$s: cancelado.</string>
     <string name="ft_erro">%1$s: erro — %2$s</string>
     <string name="ft_sem_pasta">não achei a pasta %1$s</string>
@@ -186,26 +139,20 @@
     <string name="ft_sem_espaco">sem espaço livre para %1$s</string>
     <string name="ft_compactados">%1$d jogo(s) compactado(s); %2$.0f MiB economizados.</string>
     <string name="ft_descompactados">%1$d jogo(s) descompactado(s).</string>
-    <string name="srv_http">HTTP · RiptOPL (TCP 1100)</string>
     <string name="ajuda_http">RiptOPL › Network Settings:\n• Protocol: HTTP\n• Address: %1$s\n• Port: 1100 (preencha sempre: com 0 o loader usa portas diferentes para a lista e para o jogo)\n• Base path: / (ou vazio)\n\nUsa TCP: não perde pacote em hub barato, ao contrário do UDP. Só leitura: sem VMC pelo HTTP. DVD de duas camadas (DVD9) pode não funcionar por limite do loader.</string>
     <string name="op_http_antigo">Lista para o OPL-HTTP antigo</string>
     <string name="ajuda_http_antigo">O RiptOPL e o OPL-HTTP do Docmine17 leem o games.csv em formatos diferentes, e o servidor não tem como saber qual está do outro lado.\n\nDeixe desmarcado para o RiptOPL. Marque só se usa o OPL-HTTP do Docmine17: aí a lista fica no formato simples (até ~200 jogos, sem vírgula no nome) e o ZSO vai compactado.</string>
-    <string name="srv_nfs">NFS · Neutrino, RiptOPL (TCP 2049)</string>
     <string name="ajuda_nfs">Neutrino (driver nfs:) e RiptOPL › NFS:\n• Servidor: %1$s\n• Porta: 2049\n• Export: / (ou /ps2)\n\nUsa TCP, como o HTTP: aguenta melhor hub barato. O Neutrino só lê DVD por NFS; o RiptOPL também grava VMC (o arquivo precisa já existir).</string>
-    <string name="ft_btn_atualizar">Atualizar a lista agora</string>
-    <string name="ft_resumo">%1$d jogo(s) de PS2 · %2$d de PS1 · %3$d sem capa · %4$d ISO sem compactar</string>
+    <string name="ft_btn_atualizar">Atualizar lista, capas e fichas agora</string>
     <string name="ft_resumo_vazio">Lista de jogos ainda não montada.</string>
     <string name="ft_resumo_fora">📁 %1$d fora de DVD/ e CD/ (o PS2 não vê): use Organizar.</string>
-    <string name="ft_resumo_tar">ART/art.tar desatualizado.</string>
     <string name="ft_sw_auto_tar">Refazer o art.tar sozinho quando as capas mudarem</string>
-    <string name="ft_sw_auto_zso">Compactar ISOs novas sozinho (apaga a ISO depois de conferir o ZSO; só com o servidor parado)</string>
     <string name="ft_lista_ok">Lista de jogos atualizada.</string>
     <string name="ft_lendo_jogo">Lendo %1$s</string>
     <string name="ft_atualizando">Atualizando a lista de jogos</string>
     <string name="ft_auto_zso">Compactação automática:</string>
     <string name="ft_auto_tar">art.tar automático:</string>
     <string name="ft_btn_verificar">Verificar arquivos dos loaders</string>
-    <string name="ft_ajuda_verificar">Confere se estão na pasta os arquivos que cada loader precisa:\n• POPStarter (PS1): POPS.ELF, IOPRP252.IMG, POPS_IOX.PAK, POPSTARTER.ELF\n• Ember (PS1): ember.elf e a BIOS bios.bin de 512 KiB\n• Neutrino: módulos e configuração (quando usa NHDDL pela rede)\n• OPL: pastas DVD, CD, ART, CFG, VMC\n\nOlha presença, tamanho e se o ELF é válido. Os arquivos da Sony (POPS e BIOS) não vêm com o app: use os seus.</string>
     <string name="ft_verif_nada">Nada para conferir ainda (sem POPS/, EMBER/ ou NEUTRINO/).</string>
     <string name="ft_verif_legenda">✓ ok   ✗ falta   ⚠ arquivo errado   ○ opcional</string>
     <string name="ft_ps1_destino">Jogos de PS1 vão para:</string>
@@ -222,15 +169,11 @@
     <string name="ft_org_conversao">🔄 %1$d conversão(ões), %2$.1f GB para processar. Pode levar alguns minutos.</string>
     <string name="ft_so_leitura">🔒 Pendrive só leitura (o Android monta NTFS assim). Capas, art.tar, configurações do OPL e saves (VMC) vão para uma pasta de apoio no celular, e o PS2 e esta aba veem tudo junto. Mover, compactar e converter jogos precisa de um pendrive em exFAT.</string>
     <string name="jg_buscar">Buscar jogo…</string>
-    <string name="jg_ferramentas">Ferramentas</string>
     <string name="jg_nenhum">Nenhum jogo encontrado. Copie .iso (PS2) ou .VCD/.cue (PS1) para a pasta e toque em ⚙ › Atualizar.</string>
     <string name="jg_codigo">Código: %1$s</string>
     <string name="jg_fora_lugar">📁 Fora do lugar: o PS2 não vê este jogo. Use Organizar.</string>
-    <string name="jg_sem_capa">Sem capa.</string>
     <string name="jg_compactar">Compactar (ZSO)</string>
     <string name="jg_descompactar">Descompactar (ISO)</string>
-    <string name="jg_baixar_capa">Baixar capa</string>
-    <string name="est_titulo">Aparência (experimental)</string>
     <string name="est_compacto">Compacto: menor, botões retos</string>
     <string name="est_mini">Mini: o mais denso, capas pequenas</string>
     <string name="est_lista">Lista: compacto, jogos em lista</string>
@@ -239,7 +182,6 @@
     <string name="ft_apoio_onde">Pasta de apoio: %1$s (some se o app for desinstalado).</string>
     <string name="jg_log">Log dos jogos</string>
     <string name="jg_log_vazio">Nada por aqui ainda.</string>
-    <string name="cfg_rede_titulo">Rede do PS2 (vale para todos)</string>
     <string name="cfg_rede">• IP Address Type: Static (fixo)\n• IP Address: %1$s\n• Mask: 255.255.255.0\n• Gateway: %2$s\n• DNS: %2$s\n\nUse IP fixo: o DHCP da ancoragem some por alguns segundos sempre que o cabo oscila (erro 311 no PS2). E o IP precisa ser da rede do cabo: com outro, só o UDPFS/UDPBD funcionam; SMB, NFS e HTTP não respondem.</string>
     <string name="st_outra_rede">⚠ O PS2 está com IP de outra rede (%1$s). Só UDPFS/UDPBD funcionam assim; SMB, NFS e HTTP não. No PS2: IP fixo %2$s, máscara 255.255.255.0, gateway e DNS %3$s.</string>
     <string name="esp_titulo">Pouco espaço</string>
@@ -257,4 +199,30 @@
     <string name="ft_btn_trazer">Trazer de volta</string>
     <string name="ft_trazidos">%1$d de %2$d arquivo(s) trazido(s) de volta.</string>
     <string name="ft_volta_sem_espaco">%1$s ficou pronto, mas faltam %2$d MiB na pasta dos jogos para trazê-lo. Ele está em %3$s com o nome certo: libere espaço e toque em ↩ na aba Jogos.</string>
+    <string name="cfg_titulo">Configurações</string>
+    <string name="cfg_sec_aparencia">Aparência</string>
+    <string name="cfg_sec_jogos">Jogos e capas</string>
+    <string name="cfg_sec_ferramentas">Ferramentas</string>
+    <string name="cfg_sec_servidor">Servidor</string>
+    <string name="cfg_sec_acesso">Acesso aos arquivos</string>
+    <string name="cfg_capa_tam">Tamanho das capas baixadas:</string>
+    <string name="prot_titulo">PROTOCOLO</string>
+    <string name="prot_pare_antes">Pare o servidor antes de trocar.</string>
+    <string name="ps2_titulo">No PS2 › Network settings</string>
+    <string name="hint_sem_cabo">Nada conectado no cabo. Ligue o hub ao celular e o cabo ao PS2, e confira se a Ancoragem Ethernet está ligada.</string>
+    <string name="hint_sem_pasta">Escolha onde estão os jogos na aba Jogos.</string>
+    <string name="hint_prot_pasta">Com o pendrive inteiro, só UDPFS e UDPBD funcionam. Escolha um deles ou use uma pasta.</string>
+    <string name="btn_ir_jogos">Ir para Jogos</string>
+    <string name="ip_celular">IP-do-celular</string>
+    <string name="ip_ps2">IP-do-PS2</string>
+    <string name="jg_local_titulo">Onde estão os jogos</string>
+    <string name="jg_escolher">Toque para escolher…</string>
+    <string name="jg_usb_modo">🔌 Pendrive inteiro: %1$s</string>
+    <string name="jg_usb_ajuda">O PS2 lê o pendrive direto (UDPFS/UDPBD). A lista de jogos não aparece neste modo.</string>
+    <string name="jg_opcao_usb">🔌 Pendrive inteiro (modo bloco): %1$s</string>
+    <string name="jg_resumo">%1$d de PS2 · %2$d de PS1</string>
+    <string name="jg_escolha_local">Toque em \"Onde estão os jogos\" e escolha a pasta (memória, cartão ou pendrive).</string>
+    <string name="log_vazio">O log aparece aqui quando o servidor liga.</string>
+    <string name="ft_arte">Atualizando capas e fichas</string>
+    <string name="ft_arte_ok">Arte: %1$d imagem(ns) e %2$d ficha(s) de jogo baixadas.</string>
 </resources>

@@ -21,8 +21,8 @@ android {
         // depende da ROM; o app serve em qualquer rede que alcance o PS2.
         minSdk = 21
         targetSdk = 34
-        versionCode = 5
-        versionName = "1.1.1"
+        versionCode = 6
+        versionName = "1.2.0"
     }
 
     signingConfigs {

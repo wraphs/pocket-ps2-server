@@ -3,6 +3,7 @@ package br.ps2ponte
 import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
+import android.app.Dialog
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.ClipData
@@ -32,7 +33,10 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.ScrollView
@@ -40,6 +44,7 @@ import android.widget.TextView
 import android.widget.Toast
 import br.ps2ponte.core.ferramentas.Catalogo
 import br.ps2ponte.core.ferramentas.OrganizadorPs1
+import br.ps2ponte.core.fs.VFile
 import br.ps2ponte.priv.Privilegio
 import br.ps2ponte.usb.UsbMassStorage
 import rikka.shizuku.Shizuku
@@ -47,76 +52,66 @@ import java.io.File
 import java.util.Locale
 import java.util.concurrent.Executors
 
+/**
+ * Duas abas embaixo (Servidor e Jogos) e as configurações no ⚙ do topo.
+ *
+ * - Servidor: escolhe o protocolo, mostra o que preencher no PS2 (sempre com os dados do celular), um botão
+ *   Iniciar no meio e o log. Sem cabo ou sem jogos, o botão fica cinza e uma dica diz o que falta.
+ * - Jogos: onde estão os jogos (pasta ou pendrive inteiro) e a grade de capas; capas e fichas se baixam sozinhas.
+ * - ⚙: aparência, acesso aos arquivos, opções do servidor e ferramentas.
+ */
 class MainActivity : Activity() {
 
     private lateinit var prefs: SharedPreferences
     private lateinit var usb: UsbManager
     private val fundo = Executors.newSingleThreadExecutor()
+    private val handler = Handler(Looper.getMainLooper())
 
-    private lateinit var cartaoStatus: LinearLayout
-    private lateinit var tvStatusTitulo: TextView
-    private lateinit var tvStatusDetalhe: TextView
-    private lateinit var btnIniciar: Button
-    private lateinit var tvRede: TextView
-    private lateinit var btnAncoragem: Button
-    private lateinit var btnArquivos: Button
-    private lateinit var btnBateria: Button
-    private lateinit var rbPasta: RadioButton
-    private lateinit var rbUsb: RadioButton
-    private lateinit var painelPasta: LinearLayout
-    private lateinit var grupoAcesso: RadioGroup
-    private lateinit var rbNormal: RadioButton
-    private lateinit var rbRoot: RadioButton
-    private lateinit var rbShizuku: RadioButton
-    private lateinit var tvPasta: TextView
-    private lateinit var btnCriarPastas: Button
-    private lateinit var listaVolumes: LinearLayout
-    private lateinit var btnOutraPasta: Button
-    private lateinit var painelUsb: LinearLayout
-    private lateinit var listaUsb: RadioGroup
-    private lateinit var tvUsbVazio: TextView
-    private lateinit var cbSmb: CheckBox
-    private lateinit var cbUdpfs: CheckBox
-    private lateinit var cbUdpbd: CheckBox
-    private lateinit var tvLog: TextView
-    private lateinit var cbDescompactar: CheckBox
-    private lateinit var cbHttp: CheckBox
-    private lateinit var cbNfs: CheckBox
-    private lateinit var cbHttpAntigo: CheckBox
-    private lateinit var btnTrocarPasta: Button
-    private lateinit var painelEscolha: LinearLayout
-    private var escolhaAberta = false
-
+    // Abas
     private lateinit var abaServidor: View
-    private lateinit var abaFerramentas: View
-    private lateinit var btnAbaServidor: Button
-    private lateinit var btnAbaFerramentas: Button
+    private lateinit var abaJogos: View
+    private lateinit var navServidor: TextView
+    private lateinit var navJogos: TextView
+
+    // Servidor
+    private val botoesProtocolo = LinkedHashMap<String, TextView>()
+    private lateinit var tvComoConfigurar: TextView
+    private lateinit var cartaoPs2: LinearLayout
+    private lateinit var btnIniciar: Button
+    private lateinit var tvDica: TextView
+    private lateinit var btnDica: Button
+    private lateinit var cartaoStatus: LinearLayout
+    private lateinit var tvStatus: TextView
+    private lateinit var tvLog: TextView
+
+    // Jogos
+    private lateinit var tvLocal: TextView
+    private lateinit var tvLocalEstado: TextView
+    private lateinit var btnLocalAcao: Button
     private lateinit var cartaoTarefa: LinearLayout
     private lateinit var tvTarefa: TextView
-    private lateinit var barraTarefa: android.widget.ProgressBar
+    private lateinit var barraTarefa: ProgressBar
     private lateinit var tvTarefaDetalhe: TextView
-    private lateinit var tvFtPasta: TextView
     private lateinit var tvResumo: TextView
-    private lateinit var painelFerramentas: View
     private lateinit var grade: GradeJogos
     private lateinit var tvVazio: TextView
-    private val botoesFt = mutableListOf<Button>()
 
-    private val handler = Handler(Looper.getMainLooper())
     private var ultimoBytes = 0L
     private var ultimoTempo = 0L
     private var velocidade = ""
 
     /** Resultado da última verificação da pasta: null = verificando; true = abriu. */
     private var pastaAbriu: Boolean? = null
+    private var temOpl: Boolean? = null
+    private var erroPasta: String? = null
     private var verificacao = 0
+    private var mostrandoPedido = false
 
     private val ouvinte: () -> Unit = { runOnUiThread { atualizarEstado() } }
 
     private val tick = object : Runnable {
         override fun run() {
             medirVelocidade()
-            atualizarRede()
             atualizarEstado()
             handler.postDelayed(this, 1000)
         }
@@ -129,7 +124,7 @@ class MainActivity : Activity() {
             val dev: UsbDevice? = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
             else intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
             if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false) && dev != null) {
-                ServidorService.iniciar(this@MainActivity, ServidorService.MODO_USB, null, dev.deviceName, servidoresEscolhidos())
+                ServidorService.iniciar(this@MainActivity, ServidorService.MODO_USB, null, dev.deviceName, setOf(protocolo()))
             } else {
                 aviso(getString(R.string.av_usb_sem_perm))
             }
@@ -138,10 +133,7 @@ class MainActivity : Activity() {
 
     /** Pendrive conectado/desconectado (aviso do sistema). */
     private val receptorUsb = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            atualizarUsb()
-            atualizarVolumes()
-        }
+        override fun onReceive(context: Context, intent: Intent) = atualizarEstado()
     }
 
     private val ouvinteShizuku = Shizuku.OnRequestPermissionResultListener { _, resultado ->
@@ -175,10 +167,6 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        atualizarPermissoes()
-        atualizarVolumes()
-        atualizarUsb()
-        atualizarModo()
         verificarPasta()
         handler.post(tick)
     }
@@ -198,11 +186,11 @@ class MainActivity : Activity() {
         super.onDestroy()
     }
 
-    // ------------------------------------------------------------------ tela
+    // ------------------------------------------------------------------ estilo e peças da tela
 
     /**
-     * Aparência experimental, trocada pelo 🎨: [escala] dos espaços, [texto] dos textos, [reto] = botões planos
-     * de canto pequeno (em vez dos do sistema), [coluna] da grade de jogos (dp) e [lista] = jogos em lista.
+     * Aparência experimental (⚙ › Aparência): [escala] dos espaços, [texto] dos textos, [reto] = botões planos de
+     * canto pequeno, [coluna] da grade de jogos (dp) e [lista] = jogos em lista.
      */
     private class Estilo(val id: String, val nome: Int, val escala: Float, val texto: Float, val reto: Boolean, val coluna: Int, val lista: Boolean)
 
@@ -243,7 +231,7 @@ class MainActivity : Activity() {
             addState(intArrayOf(android.R.attr.state_pressed), cor(0x4D808080))
             addState(intArrayOf(-android.R.attr.state_enabled), cor(0x12808080))
             addState(intArrayOf(), cor(0x29808080))
-        }.also { (it as android.graphics.drawable.StateListDrawable).let { s -> s.setEnterFadeDuration(80) } }
+        }
     }
 
     /** Fundo arredondado, translúcido: funciona no tema claro e no escuro. */
@@ -252,32 +240,18 @@ class MainActivity : Activity() {
         setColor(cor)
     }
 
-    /** Escolha da aparência; a tela é refeita na hora para comparar. */
-    private fun escolherEstilo() {
-        val nomes = estilos.map { getString(it.nome) }.toTypedArray()
-        AlertDialog.Builder(this).setTitle(R.string.est_titulo)
-            .setSingleChoiceItems(nomes, estilos.indexOf(estilo)) { d, i ->
-                d.dismiss()
-                if (estilos[i] != estilo) {
-                    prefs.edit().putString("estilo", estilos[i].id).apply()
-                    recreate()
-                }
-            }
-            .setNegativeButton(R.string.cancelar, null).show()
-    }
-
-    private fun cartao(pai: LinearLayout): LinearLayout = LinearLayout(this).apply {
+    private fun cartao(pai: LinearLayout, topo: Int = 12): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(dp(14), dp(10), dp(14), dp(12))
         background = fundoCartao(COR_CARTAO)
-        pai.addView(this, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
+        pai.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(topo) })
     }
 
     private fun dialogo(titulo: String, msg: String) {
         AlertDialog.Builder(this).setTitle(titulo).setMessage(msg).setPositiveButton(R.string.ok, null).show()
     }
 
-    /** Botãozinho "ⓘ" que abre uma explicação. [conteudo] é calculado na hora (usa o IP atual). */
+    /** Botãozinho "ⓘ" que abre uma explicação. */
     private fun info(titulo: String, conteudo: () -> String) = TextView(this).apply {
         text = "ⓘ"
         textSize = tam(20f)
@@ -290,227 +264,208 @@ class MainActivity : Activity() {
     private fun linha(principal: View, vararg extras: View): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        addView(principal, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        addView(principal, LinearLayout.LayoutParams(0, -2, 1f))
         extras.forEach { addView(it) }
     }
 
-    private fun titulo(t: String, ajudaTitulo: String? = null, ajuda: (() -> String)? = null): View {
-        val tv = TextView(this).apply {
-            text = t
-            textSize = tam(17f)
-            setTypeface(typeface, Typeface.BOLD)
-        }
-        return if (ajuda != null) linha(tv, info(ajudaTitulo ?: t, ajuda)) else tv
+    private fun titulo(t: String) = TextView(this).apply {
+        text = t
+        textSize = tam(17f)
+        setTypeface(typeface, Typeface.BOLD)
     }
 
-    /** Abas "Servidor" e "Ferramentas" no topo; cada uma rola sozinha. */
+    // ------------------------------------------------------------------ esqueleto: topo, abas embaixo
+
     private fun montarTela(): View {
         val tela = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val barra = LinearLayout(this).apply {
+
+        // Topo: nome e o ⚙ no canto
+        val topo = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(14), dp(6), dp(14), 0)
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(16), dp(8), dp(8), dp(4))
         }
+        topo.addView(titulo(getString(R.string.app_name)).apply { textSize = tam(19f) }, LinearLayout.LayoutParams(0, -2, 1f))
+        topo.addView(TextView(this).apply {
+            text = "⚙"
+            textSize = tam(24f)
+            setPadding(dp(14), dp(4), dp(14), dp(4))
+            contentDescription = getString(R.string.cfg_titulo)
+            setOnClickListener { abrirConfiguracoes() }
+        })
+        tela.addView(topo)
+
         abaServidor = ScrollView(this).apply { addView(montarServidor()) }
-        painelFerramentas = ScrollView(this).apply { addView(montarFerramentas()) }
-        abaFerramentas = montarJogos()
-        btnAbaServidor = botao(getString(R.string.aba_servidor)) { mostrarAba(false) }
-        btnAbaFerramentas = botao(getString(R.string.aba_ferramentas)) { mostrarAba(true) }
-        for (b in listOf(btnAbaServidor, btnAbaFerramentas)) barra.addView(b, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) })
-        barra.addView(botao("🎨") { escolherEstilo() }.apply { contentDescription = getString(R.string.est_titulo) })
-        tela.addView(barra)
-        val corpo = android.widget.FrameLayout(this)
+        abaJogos = montarJogos()
+        val corpo = FrameLayout(this)
         corpo.addView(abaServidor)
-        corpo.addView(abaFerramentas)
-        tela.addView(corpo, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        corpo.addView(abaJogos)
+        tela.addView(corpo, LinearLayout.LayoutParams(-1, 0, 1f))
+
+        // Abas embaixo, perto do dedo
+        val nav = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            background = GradientDrawable().apply { setColor(0x1A808080) }
+        }
+        fun aba(t: String, jogos: Boolean) = TextView(this).apply {
+            text = t
+            gravity = Gravity.CENTER
+            textSize = tam(15f)
+            setPadding(0, dp(14), 0, dp(14))
+            setOnClickListener { mostrarAba(jogos) }
+            nav.addView(this, LinearLayout.LayoutParams(0, -2, 1f))
+        }
+        navServidor = aba(getString(R.string.aba_servidor), false)
+        navJogos = aba(getString(R.string.aba_ferramentas), true)
+        tela.addView(nav)
+
         mostrarAba(prefs.getBoolean("aba_ferramentas", false))
         return tela
     }
 
-    private fun mostrarAba(ferramentas: Boolean) {
-        prefs.edit().putBoolean("aba_ferramentas", ferramentas).apply()
-        abaServidor.visibility = if (ferramentas) View.GONE else View.VISIBLE
-        abaFerramentas.visibility = if (ferramentas) View.VISIBLE else View.GONE
-        btnAbaServidor.setTypeface(null, if (ferramentas) Typeface.NORMAL else Typeface.BOLD)
-        btnAbaFerramentas.setTypeface(null, if (ferramentas) Typeface.BOLD else Typeface.NORMAL)
-        btnAbaServidor.alpha = if (ferramentas) 0.6f else 1f
-        btnAbaFerramentas.alpha = if (ferramentas) 1f else 0.6f
-        if (ferramentas) atualizarFerramentas()
+    private fun mostrarAba(jogos: Boolean) {
+        prefs.edit().putBoolean("aba_ferramentas", jogos).apply()
+        abaServidor.visibility = if (jogos) View.GONE else View.VISIBLE
+        abaJogos.visibility = if (jogos) View.VISIBLE else View.GONE
+        for ((v, ativo) in listOf(navServidor to !jogos, navJogos to jogos)) {
+            v.setTypeface(null, if (ativo) Typeface.BOLD else Typeface.NORMAL)
+            v.alpha = if (ativo) 1f else 0.55f
+            v.background = if (ativo) GradientDrawable().apply { setColor(0x26808080) } else null
+        }
+        if (jogos) {
+            atualizarJogos()
+            // Capas e fichas sempre frescas: confere (e baixa o que falta) toda vez que a aba abre
+            pastaUsavel()?.let { Ferramentas.rotinaArte(this, it) }
+        }
     }
+
+    // ------------------------------------------------------------------ aba Servidor
 
     private fun montarServidor(): View {
         val raiz = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(4), dp(14), dp(32))
+            setPadding(dp(14), 0, dp(14), dp(24))
         }
 
-        // Status + Iniciar
-        cartaoStatus = cartao(raiz)
-        tvStatusTitulo = texto(tamanho = 20f).apply { setTypeface(typeface, Typeface.BOLD) }.also { cartaoStatus.addView(it) }
-        tvStatusDetalhe = texto(tamanho = 14f).also { cartaoStatus.addView(it) }
+        // Protocolo
+        raiz.addView(texto(getString(R.string.prot_titulo), 13f).apply { alpha = 0.7f; setPadding(dp(2), dp(4), 0, dp(4)) })
+        val chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        for ((id, nome, sub) in PROTOCOLOS) {
+            val chip = TextView(this).apply {
+                text = "$nome\n$sub"
+                gravity = Gravity.CENTER
+                textSize = tam(12f)
+                setPadding(dp(12), dp(8), dp(12), dp(8))
+                setOnClickListener {
+                    if (Estado.rodando) return@setOnClickListener aviso(getString(R.string.prot_pare_antes))
+                    prefs.edit().putString(PREF_PROTOCOLO, id).apply()
+                    atualizarEstado()
+                }
+            }
+            chips.addView(chip, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(6) })
+            botoesProtocolo[id] = chip
+        }
+        raiz.addView(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(chips) })
+
+        // O que preencher no PS2 (sempre com os dados do celular)
+        cartaoPs2 = cartao(raiz, 10)
+        cartaoPs2.addView(titulo(getString(R.string.ps2_titulo)).apply { textSize = tam(15f) })
+        tvComoConfigurar = texto(tamanho = 13f).apply { setTextIsSelectable(true); setLineSpacing(0f, 1.1f) }.also { cartaoPs2.addView(it) }
+
+        // Iniciar no meio, com a dica do que falta logo abaixo
         btnIniciar = botao("") { iniciarOuParar() }.apply {
             textSize = tam(19f)
             setTypeface(typeface, Typeface.BOLD)
-            setPadding(0, dp(14), 0, dp(14))
+            setPadding(0, dp(16), 0, dp(16))
         }
-        cartaoStatus.addView(btnIniciar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+        raiz.addView(btnIniciar, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16) })
+        tvDica = texto(tamanho = 13f).apply { gravity = Gravity.CENTER; setPadding(dp(8), dp(6), dp(8), 0) }.also { raiz.addView(it) }
+        btnDica = botao("") {}.also { raiz.addView(it, LinearLayout.LayoutParams(-2, -2).apply { gravity = Gravity.CENTER_HORIZONTAL; topMargin = dp(4) }) }
 
-        btnArquivos = botao(getString(R.string.btn_perm_arquivos)) { abrirPermissaoArquivos() }.also { raiz.addView(it) }
-        btnBateria = botao(getString(R.string.btn_perm_bateria)) { pedirBateria() }.also { raiz.addView(it) }
+        // Andamento (servidor ligado)
+        cartaoStatus = cartao(raiz)
+        tvStatus = texto(tamanho = 13f).also { cartaoStatus.addView(it) }
 
-        // 1 · Cabo
-        val cRede = cartao(raiz)
-        cRede.addView(titulo(getString(R.string.sec_rede), getString(R.string.ajuda_rede_titulo)) {
-            getString(R.string.ajuda_rede, ipCelular(), ipPs2())
-        })
-        tvRede = texto()
-        btnAncoragem = botao(getString(R.string.btn_ancoragem)) { abrirAncoragem() }
-        cRede.addView(linha(tvRede, btnAncoragem))
-
-        // 2 · Jogos
-        val cJogos = cartao(raiz)
-        cJogos.addView(titulo(getString(R.string.sec_jogos), getString(R.string.ajuda_jogos_titulo)) { getString(R.string.ajuda_jogos) })
-        // Os controles menos usados (modo, acesso, servidores) ficam no cartão "Avançado", montado no fim
-        val cAvancado = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val grupo = RadioGroup(this).apply { orientation = RadioGroup.VERTICAL }
-        rbPasta = RadioButton(this).apply { text = getString(R.string.modo_pasta); id = View.generateViewId() }
-        rbUsb = RadioButton(this).apply { text = getString(R.string.modo_usb); id = View.generateViewId() }
-        grupo.addView(rbPasta)
-        grupo.addView(rbUsb)
-        // Marca antes de pôr o ouvinte: o isChecked dispara o ouvinte, e o atualizarModo() mexeria em
-        // painéis que ainda não existem. O onResume chama atualizarModo().
-        if (prefs.getString("modo", ServidorService.MODO_PASTA) == ServidorService.MODO_USB) rbUsb.isChecked = true else rbPasta.isChecked = true
-        grupo.setOnCheckedChangeListener { _, id ->
-            prefs.edit().putString("modo", if (id == rbUsb.id) ServidorService.MODO_USB else ServidorService.MODO_PASTA).apply()
-            atualizarModo()
-        }
-        cAvancado.addView(texto(getString(R.string.av_modo), 14f).apply { setPadding(0, dp(6), 0, 0) })
-        cAvancado.addView(grupo)
-
-        painelPasta = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        grupoAcesso = RadioGroup(this).apply { orientation = RadioGroup.HORIZONTAL }
-        rbNormal = RadioButton(this).apply { text = getString(R.string.acesso_normal); id = View.generateViewId() }
-        rbRoot = RadioButton(this).apply { text = getString(R.string.acesso_root); id = View.generateViewId() }
-        rbShizuku = RadioButton(this).apply { text = getString(R.string.acesso_shizuku); id = View.generateViewId() }
-        grupoAcesso.addView(texto(getString(R.string.acesso)).apply { setPadding(0, 0, dp(6), 0) })
-        listOf(rbNormal, rbRoot, rbShizuku).forEach { grupoAcesso.addView(it) }
-        when (acesso()) {
-            Privilegio.ROOT -> rbRoot.isChecked = true
-            Privilegio.SHIZUKU -> rbShizuku.isChecked = true
-            else -> rbNormal.isChecked = true
-        }
-        grupoAcesso.setOnCheckedChangeListener { _, id ->
-            mudarAcesso(when (id) {
-                rbRoot.id -> Privilegio.ROOT
-                rbShizuku.id -> Privilegio.SHIZUKU
-                else -> ACESSO_NORMAL
-            })
-        }
-        cAvancado.addView(linha(grupoAcesso, info(getString(R.string.ajuda_acesso_titulo)) { getString(R.string.ajuda_acesso) }))
-        tvPasta = texto().apply { setTypeface(typeface, Typeface.BOLD) }.also { painelPasta.addView(it) }
-        btnCriarPastas = botao(getString(R.string.btn_criar_opl)) { criarPastasOpl() }.also { painelPasta.addView(it) }
-        btnTrocarPasta = botao(getString(R.string.btn_trocar_pasta)) {
-            escolhaAberta = !escolhaAberta
-            atualizarEscolha()
-        }.also { painelPasta.addView(it) }
-        painelEscolha = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        listaVolumes = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        painelEscolha.addView(listaVolumes)
-        btnOutraPasta = botao("") { outraPasta() }.also { painelEscolha.addView(it) }
-        painelPasta.addView(painelEscolha)
-        cJogos.addView(painelPasta)
-
-        painelUsb = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        listaUsb = RadioGroup(this).also { painelUsb.addView(it) }
-        listaUsb.setOnCheckedChangeListener { g, id ->
-            g.findViewById<RadioButton>(id)?.tag?.let { prefs.edit().putString("usb", it as String).apply() }
-        }
-        tvUsbVazio = texto(getString(R.string.usb_nenhum)).also { painelUsb.addView(it) }
-        painelUsb.addView(botao(getString(R.string.btn_procurar)) { atualizarUsb() })
-        cJogos.addView(painelUsb)
-
-        // 3 · PS2
-        val cPs2 = cartao(raiz)
-        cPs2.addView(titulo(getString(R.string.sec_ps2)))
-        cPs2.addView(botao(getString(R.string.btn_config_ps2)) { mostrarConfigPs2() })
-
-        // ⚙ Avançado (recolhido)
-        val cAv = cartao(raiz)
-        val cabecalho = titulo(getString(R.string.sec_avancado))
-        cAv.addView(cabecalho)
-        cAv.addView(cAvancado)
-        cabecalho.setOnClickListener {
-            val abrir = cAvancado.visibility != View.VISIBLE
-            prefs.edit().putBoolean("avancado", abrir).apply()
-            cAvancado.visibility = if (abrir) View.VISIBLE else View.GONE
-            (cabecalho as TextView).text = getString(R.string.sec_avancado) + if (abrir) "  ▾" else "  ▸"
-        }
-        val abertoAv = prefs.getBoolean("avancado", false)
-        cAvancado.visibility = if (abertoAv) View.VISIBLE else View.GONE
-        (cabecalho as TextView).text = getString(R.string.sec_avancado) + if (abertoAv) "  ▾" else "  ▸"
-        cAvancado.addView(texto(getString(R.string.servidores), 14f).apply { setPadding(0, dp(8), 0, 0) })
-        cbSmb = caixaServidor(cAvancado, "smb", getString(R.string.srv_smb)) { ajudaSmb() }
-        cbUdpfs = caixaServidor(cAvancado, "udpfs", getString(R.string.srv_udpfs)) { getString(R.string.ajuda_udpfs, ipPs2()) }
-        cbUdpbd = caixaServidor(cAvancado, "udpbd", getString(R.string.srv_udpbd)) { getString(R.string.ajuda_udpbd, ipPs2()) }
-        cbNfs = caixaServidor(cAvancado, "nfs", getString(R.string.srv_nfs)) { getString(R.string.ajuda_nfs, ipCelular()) }
-        cbHttp = caixaServidor(cAvancado, "http", getString(R.string.srv_http)) { getString(R.string.ajuda_http, ipCelular()) }
-        cbHttpAntigo = CheckBox(this).apply {
-            text = getString(R.string.op_http_antigo)
-            isChecked = !prefs.getBoolean(ServidorService.PREF_HTTP_RIPTOPL, true)
-            setOnCheckedChangeListener { _, m -> prefs.edit().putBoolean(ServidorService.PREF_HTTP_RIPTOPL, !m).apply() }
-        }
-        cAvancado.addView(linha(cbHttpAntigo, info(getString(R.string.op_http_antigo)) { getString(R.string.ajuda_http_antigo) }).apply { setPadding(dp(24), 0, 0, 0) })
-        cbDescompactar = CheckBox(this).apply {
-            text = getString(R.string.op_descompactar)
-            isChecked = prefs.getBoolean(ServidorService.PREF_DESCOMPACTAR, true)
-            setOnCheckedChangeListener { _, m -> prefs.edit().putBoolean(ServidorService.PREF_DESCOMPACTAR, m).apply() }
-        }
-        cAvancado.addView(linha(cbDescompactar, info(getString(R.string.op_descompactar)) { getString(R.string.ajuda_descompactar) }))
-
-        // Log
+        // Log do servidor
         val cLog = cartao(raiz)
         cLog.addView(linha(
-            titulo(getString(R.string.sec_log)),
-            botao(getString(R.string.btn_copiar)) { copiarLog() },
+            titulo(getString(R.string.sec_log)).apply { textSize = tam(15f) },
+            botao(getString(R.string.btn_copiar)) { copiar(Estado.texto()) },
             botao(getString(R.string.btn_limpar)) { Estado.limpar() },
         ))
         tvLog = texto(tamanho = 12f).apply { typeface = Typeface.MONOSPACE; setTextIsSelectable(true) }.also { cLog.addView(it) }
-
         return raiz
     }
 
-    /** Lista de volumes e "outra pasta": aberta quando não há pasta boa ou o usuário tocou em "Trocar". */
-    private fun atualizarEscolha() {
-        val ok = pastaAbriu == true
-        painelEscolha.visibility = if (escolhaAberta || !ok) View.VISIBLE else View.GONE
-        btnTrocarPasta.visibility = if (ok) View.VISIBLE else View.GONE
-        btnTrocarPasta.text = getString(if (escolhaAberta) R.string.btn_fechar_escolha else R.string.btn_trocar_pasta)
+    private fun protocolo(): String = prefs.getString(PREF_PROTOCOLO, null)?.takeIf { p -> PROTOCOLOS.any { it.first == p } } ?: ServidorService.SRV_UDPFS
+
+    private fun modoUsb() = prefs.getString("modo", ServidorService.MODO_PASTA) == ServidorService.MODO_USB
+
+    private fun ipCelular() = Rede.cabo()?.ip ?: getString(R.string.ip_celular)
+    private fun ipPs2() = Rede.cabo()?.let { Rede.sugestaoPs2(it.ip) } ?: getString(R.string.ip_ps2)
+
+    /** O passo a passo do protocolo escolhido, sempre com o IP do celular e o IP sugerido para o PS2. */
+    private fun comoConfigurar(p: String): String {
+        val rede = getString(R.string.cfg_rede, ipPs2(), ipCelular())
+        val prot = when (p) {
+            ServidorService.SRV_SMB -> getString(R.string.ajuda_smb, ipCelular(), ipPs2(), ServidorService.PORTA_SMB)
+            ServidorService.SRV_UDPBD -> getString(R.string.ajuda_udpbd, ipPs2())
+            ServidorService.SRV_NFS -> getString(R.string.ajuda_nfs, ipCelular())
+            ServidorService.SRV_HTTP -> getString(R.string.ajuda_http, ipCelular())
+            else -> getString(R.string.ajuda_udpfs, ipPs2())
+        }
+        return prot + "\n\n" + rede
     }
 
-    // ------------------------------------------------------------------ aba Ferramentas
+    /** O que impede iniciar agora (texto da dica, rótulo e ação do botão), ou null se está tudo pronto. */
+    private fun impedimento(): Triple<String, String?, (() -> Unit)?>? {
+        val p = protocolo()
+        return when {
+            Rede.cabo() == null -> Triple(getString(R.string.hint_sem_cabo), getString(R.string.btn_ancoragem)) { abrirAncoragem() }
+            modoUsb() && p !in setOf(ServidorService.SRV_UDPFS, ServidorService.SRV_UDPBD) ->
+                Triple(getString(R.string.hint_prot_pasta), getString(R.string.btn_ir_jogos)) { mostrarAba(true) }
+            modoUsb() && UsbMassStorage.list(usb).isEmpty() ->
+                Triple(getString(R.string.usb_nenhum), getString(R.string.btn_ir_jogos)) { mostrarAba(true) }
+            !modoUsb() && pastaAbriu != true ->
+                Triple(if (pastaAbriu == null && pastaSalva() != null) getString(R.string.pasta_verificando) else getString(R.string.hint_sem_pasta),
+                    getString(R.string.btn_ir_jogos)) { mostrarAba(true) }
+            else -> null
+        }
+    }
 
-    /**
-     * Aba "Jogos": resumo, progresso da tarefa, busca e a grade de capas. As ferramentas ficam na janela do ⚙.
-     */
+    // ------------------------------------------------------------------ aba Jogos
+
     private fun montarJogos(): View {
         val tela = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val topo = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), 0, dp(14), 0)
         }
+
+        // Onde estão os jogos (toque para escolher)
+        val cLocal = cartao(topo, 4)
+        cLocal.setOnClickListener { escolherLocal() }
+        cLocal.addView(texto(getString(R.string.jg_local_titulo), 12f).apply { alpha = 0.7f })
+        tvLocal = texto(tamanho = 15f).apply { setTypeface(typeface, Typeface.BOLD) }
+        cLocal.addView(linha(tvLocal, texto("▾", 18f)))
+        tvLocalEstado = texto(tamanho = 12f).also { cLocal.addView(it) }
+        btnLocalAcao = botao("") {}.also { cLocal.addView(it, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(4) }) }
+
         // Tarefa em andamento
-        cartaoTarefa = cartao(topo)
-        tvTarefa = texto(tamanho = 16f).apply { setTypeface(typeface, Typeface.BOLD) }.also { cartaoTarefa.addView(it) }
-        barraTarefa = android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 1000 }
-        cartaoTarefa.addView(barraTarefa, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        tvTarefaDetalhe = texto(tamanho = 13f).also { cartaoTarefa.addView(it) }
+        cartaoTarefa = cartao(topo, 8)
+        tvTarefa = texto(tamanho = 14f).apply { setTypeface(typeface, Typeface.BOLD) }.also { cartaoTarefa.addView(it) }
+        barraTarefa = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 1000 }
+        cartaoTarefa.addView(barraTarefa, LinearLayout.LayoutParams(-1, -2))
+        tvTarefaDetalhe = texto(tamanho = 12f).also { cartaoTarefa.addView(it) }
         cartaoTarefa.addView(botao(getString(R.string.cancelar)) { Ferramentas.cancelar() })
 
-        tvResumo = texto(tamanho = 13f).apply {
-            setPadding(0, dp(8), 0, 0)
+        tvResumo = texto(tamanho = 12f).apply {
+            setPadding(dp(2), dp(6), 0, 0)
             setOnClickListener {
                 when {
                     Ferramentas.pendentesCache > 0 -> mostrarPendentes()
                     Ferramentas.soLeitura -> mostrarSoLeitura()
+                    (Ferramentas.catalogo?.foraDoLugar ?: 0) > 0 -> planejarOrganizacao()
                 }
             }
         }.also { topo.addView(it) }
@@ -524,23 +479,156 @@ class MainActivity : Activity() {
                 override fun afterTextChanged(s: android.text.Editable?) { grade.filtrar(s?.toString().orEmpty()); atualizarVazio() }
             })
         }
-        topo.addView(linha(
-            busca,
-            botao("📜") { mostrarLogJogos() }.apply { contentDescription = getString(R.string.jg_log) },
-            botao("⚙") { abrirFerramentas() }.apply { contentDescription = getString(R.string.jg_ferramentas) },
-        ))
+        topo.addView(busca)
         tela.addView(topo)
 
         grade = GradeJogos(this, estilo.escala, estilo.texto, estilo.coluna, estilo.lista) { detalhesJogo(it) }
         tvVazio = texto(tamanho = 15f).apply { gravity = Gravity.CENTER; setPadding(dp(24), dp(32), dp(24), dp(32)) }
-        val corpo = android.widget.FrameLayout(this)
+        val corpo = FrameLayout(this)
         corpo.addView(grade.view)
-        corpo.addView(tvVazio, android.widget.FrameLayout.LayoutParams(-1, -2))
-        tela.addView(corpo, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        corpo.addView(tvVazio, FrameLayout.LayoutParams(-1, -2))
+        tela.addView(corpo, LinearLayout.LayoutParams(-1, 0, 1f))
         return tela
     }
 
-    /** Log da aba Jogos (ferramentas), separado do log do servidor. */
+    /** Pasta pronta para as ferramentas e a grade (modo pasta e já aberta), ou null. */
+    private fun pastaUsavel(): String? = pastaSalva()?.takeIf { !modoUsb() && pastaAbriu == true }
+
+    private fun atualizarJogos() {
+        if (!::tvLocal.isInitialized) return
+        val pasta = pastaSalva()
+        // Onde estão os jogos
+        if (modoUsb()) {
+            val dev = UsbMassStorage.list(usb).firstOrNull { it.deviceName == prefs.getString("usb", null) } ?: UsbMassStorage.list(usb).firstOrNull()
+            tvLocal.text = getString(R.string.jg_usb_modo, dev?.let { UsbMassStorage.label(it) } ?: getString(R.string.usb_nenhum))
+            tvLocalEstado.text = getString(R.string.jg_usb_ajuda)
+            btnLocalAcao.visibility = View.GONE
+        } else {
+            tvLocal.text = pasta?.let { Fonte.descricao(this, it) } ?: getString(R.string.jg_escolher)
+            val precisaArquivos = pasta != null && acesso() == ACESSO_NORMAL && !Fonte.ehSaf(pasta) && !Fonte.ehPriv(pasta) && !temAcessoArquivos()
+            tvLocalEstado.text = when {
+                pasta == null -> getString(R.string.pasta_nenhuma)
+                precisaArquivos -> getString(R.string.pasta_sem_perm)
+                pastaAbriu == null -> getString(R.string.pasta_verificando)
+                erroPasta != null -> erroPasta
+                pastaAbriu == false -> getString(R.string.pasta_nao_abriu)
+                temOpl == false -> getString(R.string.pasta_sem_dvd)
+                else -> ""
+            }
+            when {
+                precisaArquivos -> mostrarAcaoLocal(getString(R.string.btn_perm_arquivos)) { abrirPermissaoArquivos() }
+                temOpl == false && pastaAbriu == true -> mostrarAcaoLocal(getString(R.string.btn_criar_opl)) { criarPastasOpl() }
+                else -> btnLocalAcao.visibility = View.GONE
+            }
+        }
+        tvLocalEstado.visibility = if (tvLocalEstado.text.isNullOrEmpty()) View.GONE else View.VISIBLE
+
+        // Grade e resumo
+        val usavel = pastaUsavel()
+        val c = if (usavel != null) Ferramentas.catalogo else null
+        grade.mostrar(usavel, c)
+        atualizarVazio()
+        tvResumo.text = if (c == null) "" else buildString {
+            append(getString(R.string.jg_resumo, c.ps2.size, c.ps1.size))
+            if (c.foraDoLugar > 0) append("\n").append(getString(R.string.ft_resumo_fora, c.foraDoLugar))
+            if (Ferramentas.soLeitura) append("\n").append(getString(R.string.ft_so_leitura))
+            if (Ferramentas.pendentesCache > 0) append("\n").append(getString(R.string.ft_pendentes, Ferramentas.pendentesCache))
+        }
+        tvResumo.visibility = if (tvResumo.text.isEmpty()) View.GONE else View.VISIBLE
+
+        val ocupado = Ferramentas.ocupado
+        cartaoTarefa.visibility = if (ocupado) View.VISIBLE else View.GONE
+        if (ocupado) {
+            tvTarefa.text = Ferramentas.titulo
+            barraTarefa.isIndeterminate = Ferramentas.progresso < 0
+            if (Ferramentas.progresso >= 0) barraTarefa.progress = Ferramentas.progresso
+            tvTarefaDetalhe.text = Ferramentas.detalhe
+        }
+    }
+
+    private fun mostrarAcaoLocal(rotulo: String, acao: () -> Unit) {
+        btnLocalAcao.text = rotulo
+        btnLocalAcao.setOnClickListener { acao() }
+        btnLocalAcao.visibility = View.VISIBLE
+    }
+
+    private fun atualizarVazio() {
+        tvVazio.text = when {
+            modoUsb() -> ""
+            pastaSalva() == null -> getString(R.string.jg_escolha_local)
+            pastaAbriu != true -> ""
+            Ferramentas.catalogo == null -> getString(R.string.ft_resumo_vazio)
+            grade.quantos == 0 -> getString(R.string.jg_nenhum)
+            else -> ""
+        }
+        tvVazio.visibility = if (tvVazio.text.isEmpty()) View.GONE else View.VISIBLE
+    }
+
+    /** "Onde estão os jogos": uma pasta (memória, cartão, pendrive, outra) ou o pendrive inteiro (modo bloco). */
+    private fun escolherLocal() {
+        if (Estado.rodando) return aviso(getString(R.string.prot_pare_antes))
+        val modo = acesso()
+        val opcoes = mutableListOf<Pair<String, () -> Unit>>()
+        for (v in Compat.volumes(this)) {
+            val rotulo = if (v.primario) getString(R.string.btn_vol, v.descricao) else getString(R.string.btn_vol_usb, v.descricao)
+            opcoes += rotulo to { usarModoPasta(); escolherVolume(v, modo) }
+        }
+        opcoes += getString(if (modo == ACESSO_NORMAL) R.string.btn_outra_pasta else R.string.btn_digitar) to { usarModoPasta(); outraPasta() }
+        for (d in UsbMassStorage.list(usb)) {
+            opcoes += getString(R.string.jg_opcao_usb, UsbMassStorage.label(d)) to {
+                prefs.edit().putString("modo", ServidorService.MODO_USB).putString("usb", d.deviceName).apply()
+                if (protocolo() !in setOf(ServidorService.SRV_UDPFS, ServidorService.SRV_UDPBD)) prefs.edit().putString(PREF_PROTOCOLO, ServidorService.SRV_UDPFS).apply()
+                atualizarEstado()
+            }
+        }
+        AlertDialog.Builder(this).setTitle(R.string.jg_local_titulo)
+            .setItems(opcoes.map { it.first }.toTypedArray()) { _, i -> opcoes[i].second() }
+            .setNegativeButton(R.string.cancelar, null).show()
+    }
+
+    private fun usarModoPasta() {
+        prefs.edit().putString("modo", ServidorService.MODO_PASTA).apply()
+    }
+
+    /** Detalhes do jogo: ficha (do CFG), capa e as ações que cabem a ele. */
+    private fun detalhesJogo(j: Catalogo.Item) {
+        val pasta = pastaUsavel() ?: return
+        fundo.execute {
+            val ficha = j.id?.let { id -> try { Ferramentas.ficha(Ferramentas.raizDe(this, pasta), id) } catch (e: Exception) { emptyMap() } } ?: emptyMap()
+            runOnUiThread { if (!isFinishing) mostrarDetalhes(j, ficha) }
+        }
+    }
+
+    private fun mostrarDetalhes(j: Catalogo.Item, ficha: Map<String, String>) {
+        val formato = when (j.tipo) {
+            Catalogo.Tipo.PS2 -> if (j.compactado) "PS2 · ZSO" else "PS2 · ISO"
+            Catalogo.Tipo.VCD -> "PS1 · POPStarter"
+            Catalogo.Tipo.CUE -> "PS1 · Ember"
+        }
+        val msg = buildString {
+            listOfNotNull(ficha["Genre"], ficha["Release"]?.takeLast(4), ficha["Developer"]).filter { it.isNotBlank() }
+                .takeIf { it.isNotEmpty() }?.let { append(it.joinToString(" · ")).append("\n\n") }
+            ficha["Description"]?.takeIf { it.isNotBlank() }?.let { append(it).append("\n\n") }
+            append(formato).append(" · ").append(String.format(Locale.getDefault(), "%.0f MiB", j.tamanho / 1048576.0)).append("\n")
+            append(getString(R.string.jg_codigo, j.id ?: getString(R.string.ft_sem_codigo))).append("\n")
+            append(j.rel)
+            if (j.foraDoLugar) append("\n\n").append(getString(R.string.jg_fora_lugar))
+        }
+        val b = AlertDialog.Builder(this).setTitle(ficha["Title"]?.takeIf { it.isNotBlank() } ?: GradeJogos.titulo(j))
+            .setMessage(msg).setNegativeButton(R.string.btn_fechar_escolha, null)
+        when {
+            j.foraDoLugar -> b.setPositiveButton(R.string.ft_btn_organizar) { _, _ -> planejarOrganizacao() }
+            j.tipo == Catalogo.Tipo.PS2 -> {
+                val compactar = !j.compactado
+                // Só compacta ou descompacta: o arquivo é trocado depois de conferido, sem perguntas
+                b.setPositiveButton(if (compactar) R.string.jg_compactar else R.string.jg_descompactar) { _, _ ->
+                    compactarComEspaco(listOf(j), compactar, getString(if (compactar) R.string.ft_btn_compactar else R.string.ft_btn_descompactar))
+                }
+            }
+        }
+        b.show()
+    }
+
     private fun mostrarLogJogos() {
         val tv = texto(Estado.textoJogos().ifEmpty { getString(R.string.jg_log_vazio) }, 12f).apply {
             typeface = Typeface.MONOSPACE
@@ -549,15 +637,11 @@ class MainActivity : Activity() {
         }
         AlertDialog.Builder(this).setTitle(R.string.jg_log).setView(ScrollView(this).apply { addView(tv) })
             .setPositiveButton(R.string.btn_fechar_escolha, null)
-            .setNeutralButton(R.string.btn_copiar) { _, _ ->
-                (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText(getString(R.string.jg_log), Estado.textoJogos()))
-                aviso(getString(R.string.log_copiado))
-            }
+            .setNeutralButton(R.string.btn_copiar) { _, _ -> copiar(Estado.textoJogos()) }
             .setNegativeButton(R.string.btn_limpar) { _, _ -> Estado.limparJogos() }
             .show()
     }
 
-    /** Arquivos que ficaram num volume temporário: trazer agora para a pasta dos jogos. */
     private fun mostrarPendentes() {
         AlertDialog.Builder(this).setTitle(R.string.ft_pendentes_titulo)
             .setMessage(getString(R.string.ft_pendentes_ajuda, Ferramentas.pendentesCache))
@@ -567,392 +651,220 @@ class MainActivity : Activity() {
             .setNegativeButton(R.string.btn_fechar_escolha, null).show()
     }
 
-    /** Pendrive só leitura: explica a pasta de apoio. */
     private fun mostrarSoLeitura() {
         val pasta = pastaSalva() ?: return
         dialogo("🔒", getString(R.string.ft_so_leitura) + "\n\n" + getString(R.string.ft_apoio_onde, Ferramentas.pastaApoio(this, pasta).path))
     }
 
-    /** Janela com as ferramentas (organizar, capas, compactar, PS1, verificar). */
-    private fun abrirFerramentas() {
-        (painelFerramentas.parent as? ViewGroup)?.removeView(painelFerramentas)
-        atualizarFerramentas()
-        AlertDialog.Builder(this).setTitle(R.string.jg_ferramentas).setView(painelFerramentas)
-            .setPositiveButton(R.string.btn_fechar_escolha, null).show()
-    }
+    // ------------------------------------------------------------------ ⚙ Configurações
 
-    private fun atualizarVazio() {
-        val pasta = pastaSalva()
-        tvVazio.text = when {
-            pasta == null || !rbPasta.isChecked -> getString(R.string.ft_sem_pasta_escolhida)
-            Ferramentas.catalogo == null -> getString(R.string.ft_resumo_vazio)
-            grade.quantos == 0 -> getString(R.string.jg_nenhum)
-            else -> ""
-        }
-        tvVazio.visibility = if (tvVazio.text.isEmpty()) View.GONE else View.VISIBLE
-    }
-
-    /** Detalhes de um jogo, com as ações que cabem a ele. */
-    private fun detalhesJogo(j: Catalogo.Item) {
-        val c = Ferramentas.catalogo
-        val formato = when (j.tipo) {
-            Catalogo.Tipo.PS2 -> if (j.compactado) "PS2 · ZSO/CSO" else "PS2 · ISO"
-            Catalogo.Tipo.VCD -> "PS1 · POPStarter (VCD)"
-            Catalogo.Tipo.CUE -> "PS1 · Ember (CUE/BIN)"
-        }
-        val msg = buildString {
-            append(formato).append("\n")
-            append(getString(R.string.jg_codigo, j.id ?: getString(R.string.ft_sem_codigo))).append("\n")
-            append(String.format(Locale.getDefault(), "%.0f MiB", j.tamanho / 1048576.0)).append("\n")
-            append(j.rel)
-            if (j.foraDoLugar) append("\n\n").append(getString(R.string.jg_fora_lugar))
-            if (c != null && !c.temCapa(j)) append("\n").append(getString(R.string.jg_sem_capa))
-        }
-        val b = AlertDialog.Builder(this).setTitle(GradeJogos.titulo(j)).setMessage(msg).setNegativeButton(R.string.btn_fechar_escolha, null)
-        if (j.tipo == Catalogo.Tipo.PS2 && !j.foraDoLugar) {
-            val compactar = !j.compactado
-            b.setPositiveButton(if (compactar) R.string.jg_compactar else R.string.jg_descompactar) { _, _ ->
-                confirmarCompactacao(listOf(j), compactar)
-            }
-        }
-        if (j.foraDoLugar) b.setPositiveButton(R.string.ft_btn_organizar) { _, _ -> planejarOrganizacao() }
-        if (c != null && !c.temCapa(j) && j.id != null && !j.foraDoLugar) {
-            b.setNeutralButton(R.string.jg_baixar_capa) { _, _ ->
-                val grande = prefs.getBoolean("capa_grande", false)
-                tarefa(getString(R.string.ft_btn_baixar_capas), arte = true) { pasta, r ->
-                    Ferramentas.baixarCapas(this, pasta, r, if (grande) 280 else 140, if (grande) 400 else 200, so = j.rel)
-                }
-            }
-        }
-        b.show()
-    }
-
-    private fun montarFerramentas(): View {
+    private fun abrirConfiguracoes() {
+        val d = Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar)
         val raiz = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(4), dp(14), dp(32))
+            setPadding(dp(16), dp(8), dp(16), dp(32))
+        }
+        raiz.addView(linha(titulo(getString(R.string.cfg_titulo)).apply { textSize = tam(20f) },
+            TextView(this).apply { text = "✕"; textSize = tam(22f); setPadding(dp(14), dp(4), dp(8), dp(4)); setOnClickListener { d.dismiss() } }))
+        val pasta = pastaUsavel()
+        fun secao(t: String) = cartao(raiz).also { it.addView(titulo(t).apply { textSize = tam(15f) }) }
+        fun opcao(pai: LinearLayout, rotulo: String, chave: String, padrao: Boolean, ajuda: (() -> String)? = null, aoMudar: (Boolean) -> Unit = {}) {
+            val cb = CheckBox(this).apply {
+                text = rotulo
+                isChecked = prefs.getBoolean(chave, padrao)
+                setOnCheckedChangeListener { _, m -> prefs.edit().putBoolean(chave, m).apply(); aoMudar(m) }
+            }
+            pai.addView(if (ajuda != null) linha(cb, info(rotulo, ajuda)) else cb)
+        }
+        fun acao(pai: LinearLayout, rotulo: String, f: () -> Unit) {
+            pai.addView(botao(rotulo) { d.dismiss(); f() }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
         }
 
-        val cPasta = cartao(raiz)
-        cPasta.addView(titulo(getString(R.string.ft_sec_pasta), getString(R.string.ft_sec_pasta)) { getString(R.string.ft_ajuda_pasta) })
-        tvFtPasta = texto(tamanho = 14f).also { cPasta.addView(it) }
-        botoesFt += botao(getString(R.string.ft_btn_atualizar)) {
-            tarefa(getString(R.string.ft_btn_atualizar)) { _, _ -> "" }
-        }.also { cPasta.addView(it) }
-        botoesFt += botao(getString(R.string.ft_btn_organizar)) { planejarOrganizacao() }.also { cPasta.addView(it) }
-        botoesFt += botao(getString(R.string.ft_btn_verificar)) { verificarArquivos() }
-            .also { cPasta.addView(linha(it, info(getString(R.string.ft_btn_verificar)) { getString(R.string.ft_ajuda_verificar) })) }
-
-        // PS1: para qual loader vão os jogos (e se converte)
-        cPasta.addView(texto(getString(R.string.ft_ps1_destino), 14f).apply { setPadding(0, dp(8), 0, 0) })
-        val grupoPs1 = RadioGroup(this).apply { orientation = RadioGroup.VERTICAL }
-        val opcoesPs1 = listOf(
-            OrganizadorPs1.Destino.MANTER to getString(R.string.ft_ps1_manter),
-            OrganizadorPs1.Destino.POPS to getString(R.string.ft_ps1_pops),
-            OrganizadorPs1.Destino.EMBER to getString(R.string.ft_ps1_ember),
-        )
-        val atualPs1 = Ferramentas.destinoPs1(this)
-        for ((d, rotulo) in opcoesPs1) {
-            val rb = RadioButton(this).apply { text = rotulo; id = View.generateViewId(); tag = d.name }
-            grupoPs1.addView(rb)
-            if (d == atualPs1) rb.isChecked = true
+        // Aparência
+        val cAp = secao(getString(R.string.cfg_sec_aparencia))
+        val gEst = RadioGroup(this)
+        for (e in estilos) gEst.addView(RadioButton(this).apply { text = getString(e.nome); id = View.generateViewId(); tag = e.id; isChecked = e == estilo })
+        gEst.setOnCheckedChangeListener { g, id ->
+            val novo = g.findViewById<RadioButton>(id)?.tag as? String ?: return@setOnCheckedChangeListener
+            if (novo != estilo.id) { prefs.edit().putString("estilo", novo).apply(); d.dismiss(); recreate() }
         }
-        grupoPs1.setOnCheckedChangeListener { g, id ->
-            g.findViewById<RadioButton>(id)?.tag?.let { prefs.edit().putString(Ferramentas.PREF_PS1_DESTINO, it as String).apply() }
-        }
-        cPasta.addView(linha(grupoPs1, info(getString(R.string.ft_ps1_destino)) { getString(R.string.ft_ajuda_ps1) }))
-        cPasta.addView(interruptor(Ferramentas.PREF_AUTO_ORGANIZAR, getString(R.string.ft_sw_auto_organizar)))
+        cAp.addView(gEst)
 
-        val cCapas = cartao(raiz)
-        cCapas.addView(titulo(getString(R.string.ft_sec_capas), getString(R.string.ft_sec_capas)) { getString(R.string.ft_ajuda_capas) })
-        val grupoTam = RadioGroup(this).apply { orientation = RadioGroup.HORIZONTAL }
+        // Jogos e capas
+        val cJ = secao(getString(R.string.cfg_sec_jogos))
+        cJ.addView(texto(getString(R.string.cfg_capa_tam), 13f).apply { alpha = 0.8f })
+        val gTam = RadioGroup(this).apply { orientation = RadioGroup.HORIZONTAL }
         val rbPeq = RadioButton(this).apply { text = getString(R.string.ft_capa_opl); id = View.generateViewId() }
         val rbGrd = RadioButton(this).apply { text = getString(R.string.ft_capa_ript); id = View.generateViewId() }
-        grupoTam.addView(rbPeq)
-        grupoTam.addView(rbGrd)
+        gTam.addView(rbPeq); gTam.addView(rbGrd)
         if (prefs.getBoolean("capa_grande", false)) rbGrd.isChecked = true else rbPeq.isChecked = true
-        grupoTam.setOnCheckedChangeListener { _, id -> prefs.edit().putBoolean("capa_grande", id == rbGrd.id).apply() }
-        cCapas.addView(grupoTam)
-        botoesFt += botao(getString(R.string.ft_btn_baixar_capas)) {
-            val grande = prefs.getBoolean("capa_grande", false)
-            tarefa(getString(R.string.ft_btn_baixar_capas), arte = true) { pasta, r ->
-                Ferramentas.baixarCapas(this, pasta, r, if (grande) 280 else 140, if (grande) 400 else 200)
-            }
-        }.also { cCapas.addView(it) }
-        botoesFt += botao(getString(R.string.ft_btn_corrigir)) {
-            tarefa(getString(R.string.ft_btn_corrigir), arte = true) { _, r -> Ferramentas.corrigirCapas(this, r) }
-        }.also { cCapas.addView(it) }
-        botoesFt += botao(getString(R.string.ft_btn_tar)) {
-            tarefa(getString(R.string.ft_btn_tar)) { _, r -> Ferramentas.empacotarArt(this, r) }
-        }.also { cCapas.addView(linha(it, info(getString(R.string.ft_btn_tar)) { getString(R.string.ft_ajuda_tar) })) }
-        cCapas.addView(interruptor(Ferramentas.PREF_AUTO_TAR, getString(R.string.ft_sw_auto_tar)))
-
-        val cComp = cartao(raiz)
-        cComp.addView(titulo(getString(R.string.ft_sec_compactar), getString(R.string.ft_sec_compactar)) { getString(R.string.ft_ajuda_compactar) })
-        cComp.addView(interruptor(Ferramentas.PREF_AUTO_ZSO, getString(R.string.ft_sw_auto_zso)))
-        botoesFt += botao(getString(R.string.ft_btn_compactar)) { escolherJogos(compactar = true) }.also { cComp.addView(it) }
-        botoesFt += botao(getString(R.string.ft_btn_descompactar)) { escolherJogos(compactar = false) }.also { cComp.addView(it) }
-
-        return raiz
-    }
-
-    /** Interruptor ligado a uma preferência; ao ligar, já roda a rotina automática na pasta atual. */
-    private fun interruptor(chave: String, rotulo: String) = android.widget.Switch(this).apply {
-        text = rotulo
-        isChecked = prefs.getBoolean(chave, false)
-        setPadding(0, dp(8), 0, dp(4))
-        setOnCheckedChangeListener { _, m ->
-            prefs.edit().putBoolean(chave, m).apply()
-            if (m) pastaSalva()?.takeIf { pastaAbriu == true && rbPasta.isChecked }?.let { Ferramentas.rotina(this@MainActivity, it, forcar = true) }
+        gTam.setOnCheckedChangeListener { _, id -> prefs.edit().putBoolean("capa_grande", id == rbGrd.id).apply() }
+        cJ.addView(gTam)
+        opcao(cJ, getString(R.string.ft_sw_auto_tar), Ferramentas.PREF_AUTO_TAR, false, { getString(R.string.ft_ajuda_tar) }) { m ->
+            if (m) pasta?.let { Ferramentas.rotina(this, it, forcar = true) }
         }
-    }
-
-    private fun atualizarFerramentas() {
-        if (!::tvFtPasta.isInitialized) return
-        val pasta = pastaSalva()
-        val usavel = pasta != null && rbPasta.isChecked
-        tvFtPasta.text = if (!usavel) getString(R.string.ft_sem_pasta_escolhida) else Fonte.descricao(this, pasta!!)
-        val c = if (usavel) Ferramentas.catalogo else null
-        grade.mostrar(if (usavel) pasta else null, c)
-        atualizarVazio()
-        tvResumo.text = when {
-            !usavel -> ""
-            c == null -> ""
-            else -> buildString {
-                append(getString(R.string.ft_resumo, c.ps2.size, c.ps1.size, c.semCapa, c.isos.size))
-                if (c.foraDoLugar > 0) append("\n").append(getString(R.string.ft_resumo_fora, c.foraDoLugar))
-                if (c.tarDesatualizado && c.tarData > 0 && !Ferramentas.soLeitura) append("\n").append(getString(R.string.ft_resumo_tar))
-                if (Ferramentas.soLeitura) append("\n").append(getString(R.string.ft_so_leitura))
-                if (Ferramentas.pendentesCache > 0) append("\n").append(getString(R.string.ft_pendentes, Ferramentas.pendentesCache))
-            }
+        cJ.addView(texto(getString(R.string.ft_ps1_destino), 13f).apply { alpha = 0.8f; setPadding(0, dp(8), 0, 0) })
+        val gPs1 = RadioGroup(this)
+        val atual = Ferramentas.destinoPs1(this)
+        for ((dest, rot) in listOf(OrganizadorPs1.Destino.MANTER to R.string.ft_ps1_manter, OrganizadorPs1.Destino.POPS to R.string.ft_ps1_pops, OrganizadorPs1.Destino.EMBER to R.string.ft_ps1_ember)) {
+            gPs1.addView(RadioButton(this).apply { text = getString(rot); id = View.generateViewId(); tag = dest.name; isChecked = dest == atual })
         }
-        tvResumo.visibility = if (tvResumo.text.isEmpty()) View.GONE else View.VISIBLE
-        val ocupado = Ferramentas.ocupado
-        cartaoTarefa.visibility = if (ocupado) View.VISIBLE else View.GONE
-        if (ocupado) {
-            tvTarefa.text = Ferramentas.titulo
-            barraTarefa.isIndeterminate = Ferramentas.progresso < 0
-            if (Ferramentas.progresso >= 0) barraTarefa.progress = Ferramentas.progresso
-            tvTarefaDetalhe.text = Ferramentas.detalhe
+        gPs1.setOnCheckedChangeListener { g, id -> g.findViewById<RadioButton>(id)?.tag?.let { prefs.edit().putString(Ferramentas.PREF_PS1_DESTINO, it as String).apply() } }
+        cJ.addView(linha(gPs1, info(getString(R.string.ft_ps1_destino)) { getString(R.string.ft_ajuda_ps1) }))
+        opcao(cJ, getString(R.string.ft_sw_auto_organizar), Ferramentas.PREF_AUTO_ORGANIZAR, false) { m ->
+            if (m) pasta?.let { Ferramentas.rotina(this, it, forcar = true) }
         }
-        val pode = !ocupado && usavel
-        for (b in botoesFt) b.isEnabled = pode
-    }
 
-    private fun confirmar(titulo: String, msg: String, acao: () -> Unit) {
-        AlertDialog.Builder(this).setTitle(titulo).setMessage(msg)
-            .setPositiveButton(R.string.ok) { _, _ -> acao() }
-            .setNegativeButton(R.string.cancelar, null).show()
-    }
-
-    /**
-     * Roda uma ferramenta na pasta escolhida (a raiz é aberta já na thread da tarefa). No fim, o catálogo é
-     * atualizado e, se [arte] e o interruptor estiver ligado, o art.tar é refeito.
-     */
-    private fun tarefa(nome: String, arte: Boolean = false, pendrive: Boolean = false, corpo: (String, br.ps2ponte.core.fs.VFile) -> String) {
-        val pasta = pastaSalva() ?: return aviso(getString(R.string.av_escolha_pasta))
-        Ferramentas.rodar(this, nome) {
-            if (pendrive) Ferramentas.exigirPendrive(this)
-            val r = Ferramentas.raizDe(this, pasta)
-            val res = corpo(pasta, r)
-            (res + Ferramentas.depois(this, pasta, r, arte)).trim().ifEmpty { getString(R.string.ft_lista_ok) }
+        // Ferramentas
+        val cF = secao(getString(R.string.cfg_sec_ferramentas))
+        if (pasta == null) cF.addView(texto(getString(R.string.ft_sem_pasta_escolhida), 13f))
+        else {
+            acao(cF, getString(R.string.ft_btn_organizar)) { planejarOrganizacao() }
+            acao(cF, getString(R.string.ft_btn_atualizar)) { Ferramentas.rotinaArte(this, pasta, forcar = true) }
+            acao(cF, getString(R.string.ft_btn_tar)) { tarefa(getString(R.string.ft_btn_tar)) { _, r -> Ferramentas.empacotarArt(this, r) } }
+            acao(cF, getString(R.string.ft_btn_corrigir)) { tarefa(getString(R.string.ft_btn_corrigir), arte = true) { _, r -> Ferramentas.corrigirCapas(this, r) } }
+            acao(cF, getString(R.string.ft_btn_verificar)) { verificarArquivos() }
+            acao(cF, getString(R.string.btn_criar_opl)) { criarPastasOpl() }
         }
-    }
+        acao(cF, getString(R.string.jg_log)) { mostrarLogJogos() }
 
-    private var mostrandoPedido = false
-
-    /** Monta o plano de Organizar numa tarefa; o resultado volta por [Ferramentas.pedido] e vira um diálogo. */
-    private fun planejarOrganizacao() {
-        val pasta = pastaSalva() ?: return aviso(getString(R.string.av_escolha_pasta))
-        Ferramentas.rodar(this, getString(R.string.ft_planejando), silencioso = true) {
-            val o = Ferramentas.planejarOrganizacao(this, pasta, Ferramentas.raizDe(this, pasta))
-            o.manual = true
-            Ferramentas.pedido = o
-            ""
+        // Servidor
+        val cS = secao(getString(R.string.cfg_sec_servidor))
+        opcao(cS, getString(R.string.op_descompactar), ServidorService.PREF_DESCOMPACTAR, true, { getString(R.string.ajuda_descompactar) })
+        val cbAntigo = CheckBox(this).apply {
+            text = getString(R.string.op_http_antigo)
+            isChecked = !prefs.getBoolean(ServidorService.PREF_HTTP_RIPTOPL, true)
+            setOnCheckedChangeListener { _, m -> prefs.edit().putBoolean(ServidorService.PREF_HTTP_RIPTOPL, !m).apply() }
         }
-    }
+        cS.addView(linha(cbAntigo, info(getString(R.string.op_http_antigo)) { getString(R.string.ajuda_http_antigo) }))
+        val bateriaOk = Build.VERSION.SDK_INT < 23 || (getSystemService(Context.POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(packageName)
+        if (!bateriaOk) acao(cS, getString(R.string.btn_perm_bateria)) { pedirBateria() }
 
-    /** Mostra o que Organizar vai fazer; conversões de PS1 pedem para escolher se apaga os originais. */
-    private fun mostrarOrganizacao(o: Ferramentas.Organizacao) {
-        Ferramentas.pedido = null
-        if (isFinishing) return
-        if (o.vazio) {
-            if (o.manual) aviso(getString(R.string.ft_nada_organizar))
-            return
+        // Acesso aos arquivos
+        val cA = secao(getString(R.string.cfg_sec_acesso))
+        val gAc = RadioGroup(this).apply { orientation = RadioGroup.HORIZONTAL }
+        for ((m, rot) in listOf(ACESSO_NORMAL to R.string.acesso_normal, Privilegio.ROOT to R.string.acesso_root, Privilegio.SHIZUKU to R.string.acesso_shizuku)) {
+            gAc.addView(RadioButton(this).apply { text = getString(rot); id = View.generateViewId(); tag = m; isChecked = acesso() == m; isEnabled = !Estado.rodando })
         }
-        mostrandoPedido = true
-        val titulo = getString(R.string.ft_btn_organizar)
-        val fazer = { apagar: Boolean ->
-            val conversoes = o.plano.acoes.filter { it.conversao }
-            if (conversoes.isEmpty()) {
-                Ferramentas.rodar(this, titulo) { Ferramentas.executarOrganizacao(this, o, apagar) }
-            } else {
-                // Conversões de PS1 precisam de espaço para o arquivo novo: mesma conferência da compactação
-                comEspaco(apagar, { p, r -> Ferramentas.espacoCom(this, p, r, conversoes.maxOf { it.bytes }) }) { temp ->
-                    Ferramentas.rodar(this, titulo) { Ferramentas.executarOrganizacao(this, o, apagar, temp) }
-                }
-            }
-        }
-        val b = AlertDialog.Builder(this).setTitle(titulo).setMessage(o.resumo(this))
-            .setOnDismissListener { mostrandoPedido = false }
-            .setNegativeButton(R.string.cancelar, null)
-        if (o.plano.conversoes > 0) {
-            b.setPositiveButton(R.string.ft_converter_manter) { _, _ -> fazer(false) }
-            b.setNeutralButton(R.string.ft_converter_apagar) { _, _ -> fazer(true) }
-        } else {
-            b.setPositiveButton(R.string.ok) { _, _ -> fazer(false) }
-        }
-        b.show()
-    }
+        gAc.setOnCheckedChangeListener { g, id -> (g.findViewById<RadioButton>(id)?.tag as? String)?.let { mudarAcesso(it) } }
+        cA.addView(linha(gAc, info(getString(R.string.ajuda_acesso_titulo)) { getString(R.string.ajuda_acesso) }))
 
-    /** Confere os arquivos dos loaders (POPStarter, Ember, Neutrino) e mostra a lista. */
-    private fun verificarArquivos() {
-        val pasta = pastaSalva() ?: return
-        aviso(getString(R.string.ft_lendo))
-        fundo.execute {
-            val texto = try {
-                Ferramentas.verificar(this, pasta, Ferramentas.raizDe(this, pasta))
-            } catch (e: Exception) {
-                getString(R.string.pasta_erro, e.message ?: e.javaClass.simpleName)
-            }
-            runOnUiThread { if (!isFinishing) dialogo(getString(R.string.ft_btn_verificar), texto) }
-        }
-    }
+        // Sobre
+        val versao = try { packageManager.getPackageInfo(packageName, 0).versionName } catch (e: Exception) { "" }
+        raiz.addView(texto("${getString(R.string.app_name)} $versao · github.com/wraphs/pocket-ps2-server", 12f).apply {
+            alpha = 0.6f; gravity = Gravity.CENTER; setPadding(0, dp(16), 0, 0)
+        })
 
-    /** Escolhe quais jogos compactar (ISO) ou descompactar (ZSO/CSO), e se apaga os originais. */
-    private fun escolherJogos(compactar: Boolean) {
-        val c = Ferramentas.catalogo ?: return aviso(getString(R.string.ft_resumo_vazio))
-        val lista = c.jogos.filter { !it.ps1 && it.compactado != compactar }
-        if (lista.isEmpty()) return aviso(getString(if (compactar) R.string.ft_nada_compactar else R.string.ft_nada_descompactar))
-        val marcados = BooleanArray(lista.size)
-        val nomes = lista.map { "${it.rel}  (${it.tamanho / (1024 * 1024)} MiB)" }.toTypedArray()
-        val titulo = getString(if (compactar) R.string.ft_btn_compactar else R.string.ft_btn_descompactar)
-        AlertDialog.Builder(this).setTitle(titulo)
-            .setMultiChoiceItems(nomes, marcados) { _, i, m -> marcados[i] = m }
-            .setPositiveButton(R.string.ok) { _, _ ->
-                val escolhidos = lista.filterIndexed { i, _ -> marcados[i] }
-                if (escolhidos.isNotEmpty()) confirmarCompactacao(escolhidos, compactar)
-            }
-            .setNegativeButton(R.string.cancelar, null).show()
-    }
-
-    /** Pergunta se apaga os originais e segue para a conferência de espaço. */
-    private fun confirmarCompactacao(escolhidos: List<Catalogo.Item>, compactar: Boolean) {
-        val titulo = getString(if (compactar) R.string.ft_btn_compactar else R.string.ft_btn_descompactar)
-        AlertDialog.Builder(this).setTitle(titulo)
-            .setMessage(getString(if (compactar) R.string.ft_conf_compactar else R.string.ft_conf_descompactar, escolhidos.size))
-            .setPositiveButton(R.string.ft_manter) { _, _ -> compactarComEspaco(escolhidos, compactar, false, titulo) }
-            .setNeutralButton(R.string.ft_apagar) { _, _ -> compactarComEspaco(escolhidos, compactar, true, titulo) }
-            .setNegativeButton(R.string.cancelar, null).show()
-    }
-
-    /**
-     * Confere o espaço antes de compactar/descompactar. Se faltar na pasta, oferece montar a saída em outro
-     * volume (memória interna, cartão, outro pendrive) e trazer de volta; se não houver espaço em lugar nenhum,
-     * diz quanto falta e sugere mover algum arquivo temporariamente.
-     */
-    private fun compactarComEspaco(itens: List<Catalogo.Item>, compactar: Boolean, apagar: Boolean, titulo: String) {
-        comEspaco(apagar, { p, r -> Ferramentas.espacoPara(this, p, r, itens, compactar) }) { temp ->
-            tarefa(titulo, pendrive = true) { _, r ->
-                val jogos = Ferramentas.jogosDe(r, itens)
-                if (compactar) Ferramentas.compactar(this, jogos, apagar, temp) else Ferramentas.descompactar(this, jogos, apagar, temp)
-            }
-        }
-    }
-
-    /** Confere o espaço com [calcular] (numa thread) e roda [rodar] com a pasta temporária escolhida, ou null. */
-    private fun comEspaco(apagar: Boolean, calcular: (String, br.ps2ponte.core.fs.VFile) -> Ferramentas.Espaco, rodar: (File?) -> Unit) {
-        val pasta = pastaSalva() ?: return
-        if (apagar && Estado.rodando) {
-            // Com o servidor ligado o PS2 pode estar com o jogo aberto: apagar não libera o espaço até ele fechar,
-            // e o arquivo novo não caberia na volta. Para antes (os arquivos fecham em segundo plano).
-            AlertDialog.Builder(this).setTitle(R.string.esp_titulo).setMessage(R.string.esp_servidor)
-                .setPositiveButton(R.string.esp_parar) { _, _ ->
-                    ServidorService.parar(this)
-                    handler.postDelayed({ if (!isFinishing) comEspaco(apagar, calcular, rodar) }, 3000)
-                }
-                .setNegativeButton(R.string.cancelar, null).show()
-            return
-        }
-        fundo.execute {
-            val e = try { calcular(pasta, Ferramentas.raizDe(this, pasta)) } catch (ex: Exception) { null }
-            runOnUiThread {
-                if (isFinishing) return@runOnUiThread
-                if (e == null || !e.falta) return@runOnUiThread rodar(null)
-                val gb = { b: Long -> String.format(Locale.getDefault(), "%.1f GB", b / 1073741824.0) }
-                val lugar = e.lugar
-                // Montar em outro lugar só resolve se, na volta, couber: apagando o original, ou se a saída for menor
-                if (lugar != null) {
-                    AlertDialog.Builder(this).setTitle(R.string.esp_titulo)
-                        .setMessage(getString(R.string.esp_temporario, gb(e.precisa), gb(e.livre), lugar.nome, gb(lugar.livre)) +
-                            if (apagar) "" else "\n\n" + getString(R.string.esp_manter_aviso))
-                        .setPositiveButton(R.string.esp_usar) { _, _ -> rodar(lugar.dir) }
-                        .setNegativeButton(R.string.cancelar, null).show()
-                } else {
-                    AlertDialog.Builder(this).setTitle(R.string.esp_titulo)
-                        .setMessage(getString(R.string.esp_nenhum, gb(e.precisa), gb(e.livre), gb(e.precisa - e.livre)) +
-                            e.lugares.joinToString("") { "\n• ${it.nome}: ${gb(it.livre)}" })
-                        .setPositiveButton(R.string.ok, null).show()
-                }
-            }
-        }
-    }
-
-    private fun caixaServidor(pai: LinearLayout, chave: String, rotulo: String, ajuda: () -> String): CheckBox {
-        val cb = CheckBox(this).apply {
-            text = rotulo
-            isChecked = prefs.getBoolean("srv_$chave", true)
-            setOnCheckedChangeListener { _, marcado -> prefs.edit().putBoolean("srv_$chave", marcado).apply() }
-        }
-        pai.addView(linha(cb, info(rotulo, ajuda)))
-        return cb
-    }
-
-    // ------------------------------------------------------------------ textos de ajuda
-
-    private fun ipCelular() = Rede.cabo()?.ip ?: "<IP>"
-    private fun ipPs2() = Rede.cabo()?.let { Rede.sugestaoPs2(it.ip) } ?: "<IP PS2>"
-
-    private fun ajudaSmb() = getString(R.string.ajuda_smb, ipCelular(), ipPs2(), ServidorService.PORTA_SMB)
-
-    private fun mostrarConfigPs2() {
-        // Rede do PS2 primeiro: IP fixo na rede do cabo (o DHCP da ancoragem some quando o cabo oscila, e com IP
-        // de outra rede só o UDP chega: SMB, NFS e HTTP ficam mudos)
-        val partes = mutableListOf("— " + getString(R.string.cfg_rede_titulo) + " —\n" + getString(R.string.cfg_rede, ipPs2(), ipCelular()))
-        if (cbSmb.isChecked && rbPasta.isChecked) partes += "— SMB1/SMB2 —\n" + ajudaSmb()
-        if (cbUdpfs.isChecked) partes += "— UDPFS —\n" + getString(R.string.ajuda_udpfs, ipPs2())
-        if (cbUdpbd.isChecked) partes += "— UDPBD —\n" + getString(R.string.ajuda_udpbd, ipPs2())
-        if (cbNfs.isChecked && rbPasta.isChecked) partes += "— NFS —\n" + getString(R.string.ajuda_nfs, ipCelular())
-        if (cbHttp.isChecked && rbPasta.isChecked) partes +="— HTTP —\n" + getString(R.string.ajuda_http, ipCelular())
-        dialogo(getString(R.string.config_ps2_titulo), partes.joinToString("\n\n").ifEmpty { getString(R.string.av_marque_servidor) })
+        d.setContentView(ScrollView(this).apply { addView(raiz) })
+        d.show()
     }
 
     // ------------------------------------------------------------------ atualizações
 
-    private fun atualizarRede() {
-        val cabo = Rede.cabo()
-        tvRede.text = if (cabo == null) getString(R.string.rede_nenhuma) else getString(R.string.rede_ok, cabo.ip, Rede.sugestaoPs2(cabo.ip))
-        btnAncoragem.visibility = if (cabo == null) View.VISIBLE else View.GONE
+    private fun atualizarEstado() {
+        if (!::btnIniciar.isInitialized) return
+        val rodando = Estado.rodando
+        val p = protocolo()
+
+        // Protocolo escolhido em destaque
+        for ((id, chip) in botoesProtocolo) {
+            val ativo = id == p
+            chip.background = GradientDrawable().apply {
+                cornerRadius = dp(if (estilo.reto) 6 else 14).toFloat()
+                setColor(if (ativo) COR_ESCOLHIDO else 0x14808080)
+            }
+            chip.setTypeface(null, if (ativo) Typeface.BOLD else Typeface.NORMAL)
+            chip.alpha = if (rodando && !ativo) 0.4f else 1f
+        }
+        tvComoConfigurar.text = comoConfigurar(p)
+        cartaoPs2.alpha = if (Rede.cabo() == null) 0.5f else 1f
+
+        // Iniciar: cinza com a dica do que falta (sem cabo, sem jogos…); some a dica quando está tudo certo
+        val imp = if (rodando) null else impedimento()
+        btnIniciar.text = getString(if (rodando) R.string.btn_parar else R.string.btn_iniciar)
+        btnIniciar.isEnabled = rodando || imp == null
+        btnIniciar.alpha = if (btnIniciar.isEnabled) 1f else 0.45f
+        tvDica.text = imp?.first ?: ""
+        tvDica.visibility = if (imp == null) View.GONE else View.VISIBLE
+        val rotulo = imp?.second
+        btnDica.visibility = if (rotulo == null) View.GONE else View.VISIBLE
+        if (rotulo != null) {
+            btnDica.text = rotulo
+            btnDica.setOnClickListener { imp?.third?.invoke() }
+        }
+
+        // Andamento
+        if (rodando) {
+            val linhas = mutableListOf<String>()
+            Estado.dica?.let { linhas += it }
+            linhas += if (Estado.ligadoEm == 0L) getString(R.string.st_iniciando) else Estado.resumo
+            Estado.stats.lastClient?.let { ip ->
+                val s = ((System.currentTimeMillis() - Estado.stats.lastRequestAt.get()) / 1000).coerceAtLeast(0)
+                linhas += getString(R.string.st_ultimo_pedido, ip, if (s < 60) "${s}s" else "${s / 60}min")
+            }
+            if (velocidade.isNotEmpty()) linhas += velocidade
+            tvStatus.text = linhas.joinToString("\n")
+            cartaoStatus.background = fundoCartao(if (Estado.dica != null) COR_ALERTA else COR_OK)
+            cartaoStatus.visibility = View.VISIBLE
+        } else {
+            cartaoStatus.visibility = View.GONE
+        }
+        tvLog.text = Estado.texto().ifEmpty { getString(R.string.log_vazio) }
+
+        if (abaJogos.visibility == View.VISIBLE) atualizarJogos()
+        // A rotina automática achou conversões de PS1: pergunta antes (em qualquer aba)
+        Ferramentas.pedido?.let { if (!Ferramentas.ocupado && !mostrandoPedido) mostrarOrganizacao(it) }
     }
 
-    private fun atualizarPermissoes() {
-        val pasta = pastaSalva()
-        val precisaArquivos = rbPasta.isChecked && acesso() == ACESSO_NORMAL && pasta != null && !Fonte.ehSaf(pasta) && !Fonte.ehPriv(pasta)
-        btnArquivos.visibility = if (precisaArquivos && !temAcessoArquivos()) View.VISIBLE else View.GONE
-        val bateria = Build.VERSION.SDK_INT < 23 || (getSystemService(Context.POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(packageName)
-        btnBateria.visibility = if (bateria) View.GONE else View.VISIBLE
+    private fun medirVelocidade() {
+        val agora = System.currentTimeMillis()
+        val bytes = Estado.stats.bytesRead.get() + Estado.stats.bytesWritten.get()
+        if (ultimoTempo > 0 && agora > ultimoTempo) {
+            val mbs = (bytes - ultimoBytes) / 1048576.0 / ((agora - ultimoTempo) / 1000.0)
+            velocidade = if (bytes == 0L) "" else String.format(Locale.getDefault(), getString(R.string.velocidade), mbs, bytes / 1048576.0)
+        }
+        ultimoBytes = bytes
+        ultimoTempo = agora
     }
+
+    // ------------------------------------------------------------------ servidor: iniciar e parar
+
+    private fun iniciarOuParar() {
+        if (Estado.rodando) {
+            ServidorService.parar(this)
+            return
+        }
+        impedimento()?.let { return aviso(it.first) }
+        val servidores = setOf(protocolo())
+        if (!modoUsb()) {
+            val pasta = pastaSalva() ?: return aviso(getString(R.string.av_escolha_pasta))
+            if (Fonte.ehSaf(pasta) && !Fonte.temPermissao(this, pasta)) return aviso(getString(R.string.av_saf_de_novo))
+            if (!Fonte.ehSaf(pasta) && !Fonte.ehPriv(pasta) && !temAcessoArquivos()) {
+                aviso(getString(R.string.av_perm_arquivos))
+                abrirPermissaoArquivos()
+                return
+            }
+            ServidorService.iniciar(this, ServidorService.MODO_PASTA, pasta, null, servidores)
+        } else {
+            val devs = UsbMassStorage.list(usb)
+            val dev = devs.firstOrNull { it.deviceName == prefs.getString("usb", null) } ?: devs.firstOrNull()
+                ?: return aviso(getString(R.string.av_usb_desconectado))
+            if (usb.hasPermission(dev)) {
+                ServidorService.iniciar(this, ServidorService.MODO_USB, null, dev.deviceName, servidores)
+            } else {
+                val pi = PendingIntent.getBroadcast(this, 0, Intent(ACAO_PERMISSAO_USB).setPackage(packageName), Compat.MUTAVEL)
+                usb.requestPermission(dev, pi)
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ pasta dos jogos
 
     private fun acesso(): String = prefs.getString("acesso", ACESSO_NORMAL) ?: ACESSO_NORMAL
 
-    private fun atualizarVolumes() {
-        listaVolumes.removeAllViews()
-        val modo = acesso()
-        for (v in Compat.volumes(this)) {
-            val rotulo = if (v.primario) getString(R.string.btn_vol, v.descricao) else getString(R.string.btn_vol_usb, v.descricao)
-            listaVolumes.addView(botao(rotulo) { escolherVolume(v, modo) })
-        }
-        btnOutraPasta.text = getString(if (modo == ACESSO_NORMAL) R.string.btn_outra_pasta else R.string.btn_digitar)
+    /** Pasta salva, corrigindo caminhos /mnt/media_rw/... gravados por versões anteriores (só root lê lá). */
+    private fun pastaSalva(): String? = prefs.getString("pasta", null)?.let {
+        if (it.startsWith("/mnt/media_rw/")) "/storage/" + it.removePrefix("/mnt/media_rw/") else it
     }
 
     private fun escolherVolume(v: Compat.Volume, modo: String) {
@@ -983,205 +895,54 @@ class MainActivity : Activity() {
         }
     }
 
-    /** Pasta salva, corrigindo caminhos /mnt/media_rw/... gravados por versões anteriores (só root lê lá). */
-    private fun pastaSalva(): String? = prefs.getString("pasta", null)?.let {
-        if (it.startsWith("/mnt/media_rw/")) "/storage/" + it.removePrefix("/mnt/media_rw/") else it
-    }
-
-    /** Abre a pasta numa thread (no root/Shizuku pode esperar o "Permitir") e mostra o resultado. */
+    /** Abre a pasta numa thread (no root/Shizuku pode esperar o "Permitir") e guarda o resultado. */
     private fun verificarPasta() {
         val pasta = pastaSalva()
         val minha = ++verificacao
-        if (pasta == null) {
-            pastaAbriu = false
-            tvPasta.text = getString(R.string.pasta_nenhuma)
-            btnCriarPastas.visibility = View.GONE
-            atualizarEscolha()
-            atualizarPermissoes()
+        erroPasta = null
+        if (pasta == null || modoUsb()) {
+            pastaAbriu = if (pasta == null) false else pastaAbriu
+            atualizarEstado()
             return
         }
-        val descricao = Fonte.descricao(this, pasta)
         pastaAbriu = null
-        tvPasta.text = "$descricao  ${getString(R.string.pasta_verificando)}"
-        btnCriarPastas.visibility = View.GONE
-        atualizarEscolha()
-        atualizarPermissoes()
-
+        temOpl = null
+        atualizarEstado()
         if (Fonte.ehPriv(pasta) && Privilegio.modo(pasta) == Privilegio.SHIZUKU && !Privilegio.shizukuPermitido()) {
-            if (!Privilegio.shizukuRodando()) {
-                mostrarPasta(minha, descricao, null, getString(R.string.shizuku_parado))
-            } else {
-                Privilegio.pedirShizuku(REQ_SHIZUKU)
-                mostrarPasta(minha, descricao, null, getString(R.string.shizuku_negado))
-            }
-            return
+            if (Privilegio.shizukuRodando()) Privilegio.pedirShizuku(REQ_SHIZUKU)
+            return mostrarPasta(minha, null, getString(if (Privilegio.shizukuRodando()) R.string.shizuku_negado else R.string.shizuku_parado))
         }
         val saf = Fonte.ehSaf(pasta)
         val acesso = if (saf) Fonte.temPermissao(this, pasta) else Fonte.ehPriv(pasta) || temAcessoArquivos()
-        if (!acesso) {
-            mostrarPasta(minha, descricao, null, getString(if (saf) R.string.pasta_saf_de_novo else R.string.pasta_sem_perm))
-            return
-        }
+        if (!acesso) return mostrarPasta(minha, null, getString(if (saf) R.string.pasta_saf_de_novo else R.string.pasta_sem_perm))
         fundo.execute {
-            var filhos: List<br.ps2ponte.core.fs.VFile>? = null
+            var filhos: List<VFile>? = null
             var erro: String? = null
             try {
                 filhos = Fonte.raiz(this, pasta).listFiles()
             } catch (e: Exception) {
                 erro = getString(R.string.pasta_erro, e.message ?: e.javaClass.simpleName)
             }
-            val temOpl = listOf("DVD", "CD").any { nome -> filhos?.any { it.isDirectory && it.name.equals(nome, true) } == true }
-            runOnUiThread { mostrarPasta(minha, descricao, filhos?.let { temOpl }, erro) }
+            val opl = listOf("DVD", "CD").any { nome -> filhos?.any { it.isDirectory && it.name.equals(nome, true) } == true }
+            runOnUiThread { mostrarPasta(minha, filhos?.let { opl }, erro) }
         }
     }
 
-    /** [temOpl]: null = não abriu (com [erro]); senão se tem DVD/ ou CD/. */
-    private fun mostrarPasta(minha: Int, descricao: String, temOpl: Boolean?, erro: String?) {
+    /** [opl]: null = não abriu (com [erro]); senão se tem DVD/ ou CD/. */
+    private fun mostrarPasta(minha: Int, opl: Boolean?, erro: String?) {
         if (minha != verificacao || isFinishing) return
-        pastaAbriu = temOpl != null
-        val estado = when {
-            erro != null -> erro
-            temOpl == null -> getString(R.string.pasta_nao_abriu)
-            temOpl -> getString(R.string.pasta_ok)
-            else -> getString(R.string.pasta_sem_dvd)
-        }
-        tvPasta.text = "$descricao  $estado"
-        btnCriarPastas.visibility = if (temOpl == false) View.VISIBLE else View.GONE
-        if (temOpl != null) {
-            escolhaAberta = false
-            // Pasta abriu: catálogo de jogos em dia (e compactação/art.tar automáticos, se ligados)
-            pastaSalva()?.takeIf { rbPasta.isChecked }?.let {
+        pastaAbriu = opl != null
+        temOpl = opl
+        erroPasta = erro
+        if (opl != null) {
+            // Pasta abriu: catálogo de jogos em dia (e as rotinas automáticas, se ligadas)
+            pastaSalva()?.let {
                 Ferramentas.carregarCatalogo(this, it)
                 Ferramentas.rotina(this, it)
+                if (abaJogos.visibility == View.VISIBLE) Ferramentas.rotinaArte(this, it)
             }
         }
-        atualizarEscolha()
-        atualizarPermissoes()
         atualizarEstado()
-    }
-
-    private fun atualizarUsb() {
-        listaUsb.removeAllViews()
-        val salvo = prefs.getString("usb", null)
-        val devs = UsbMassStorage.list(usb)
-        for (d in devs) {
-            val rb = RadioButton(this).apply {
-                text = UsbMassStorage.label(d)
-                tag = d.deviceName
-                id = View.generateViewId()
-            }
-            listaUsb.addView(rb)
-            if (d.deviceName == salvo || devs.size == 1) rb.isChecked = true
-        }
-        tvUsbVazio.visibility = if (devs.isEmpty()) View.VISIBLE else View.GONE
-    }
-
-    private fun atualizarModo() {
-        val pasta = rbPasta.isChecked
-        painelPasta.visibility = if (pasta) View.VISIBLE else View.GONE
-        painelUsb.visibility = if (pasta) View.GONE else View.VISIBLE
-        // No modo bloco não há pasta para o SMB
-        cbSmb.isEnabled = pasta
-        cbHttp.isEnabled = pasta
-        cbNfs.isEnabled = pasta
-        atualizarPermissoes()
-    }
-
-    private fun atualizarEstado() {
-        val rodando = Estado.rodando
-        btnIniciar.text = getString(if (rodando) R.string.btn_parar else R.string.btn_iniciar)
-        val cabo = Rede.cabo()
-        val (titulo, detalhe, cor) = when {
-            rodando && Estado.ligadoEm == 0L -> Triple(getString(R.string.st_iniciando), "", COR_NEUTRA)
-            rodando -> {
-                val linhas = mutableListOf(Estado.resumo)
-                Estado.stats.lastClient?.let { ip ->
-                    val s = ((System.currentTimeMillis() - Estado.stats.lastRequestAt.get()) / 1000).coerceAtLeast(0)
-                    linhas += getString(R.string.st_ultimo_pedido, ip, if (s < 60) "${s}s" else "${s / 60}min")
-                }
-                if (velocidade.isNotEmpty()) linhas += velocidade
-                Estado.dica?.let { linhas.add(0, it) }
-                Triple(getString(R.string.st_servindo), linhas.joinToString("\n"), if (Estado.dica != null) COR_ALERTA else COR_OK)
-            }
-            cabo == null -> Triple(getString(R.string.st_sem_cabo), getString(R.string.st_sem_cabo_dica), COR_ALERTA)
-            rbPasta.isChecked && pastaAbriu != true -> Triple(getString(R.string.st_parado), getString(R.string.st_escolha_pasta), COR_NEUTRA)
-            else -> Triple(getString(R.string.st_parado), getString(R.string.st_pronto), COR_NEUTRA)
-        }
-        tvStatusTitulo.text = titulo
-        tvStatusDetalhe.text = detalhe
-        tvStatusDetalhe.visibility = if (detalhe.isEmpty()) View.GONE else View.VISIBLE
-        cartaoStatus.background = fundoCartao(cor)
-
-        tvLog.text = Estado.texto()
-        val livre = !rodando
-        for (cb in listOf(cbUdpfs, cbUdpbd)) cb.isEnabled = livre
-        cbSmb.isEnabled = livre && rbPasta.isChecked
-        cbHttp.isEnabled = livre && rbPasta.isChecked
-        cbNfs.isEnabled = livre && rbPasta.isChecked
-        cbHttpAntigo.isEnabled = livre && rbPasta.isChecked
-        rbPasta.isEnabled = livre
-        rbUsb.isEnabled = livre
-        for (i in 0 until grupoAcesso.childCount) grupoAcesso.getChildAt(i).isEnabled = livre
-        cbDescompactar.isEnabled = livre
-        if (abaFerramentas.visibility == View.VISIBLE) atualizarFerramentas()
-        // A rotina automática achou conversões de PS1: pergunta antes (em qualquer aba)
-        Ferramentas.pedido?.let { if (!Ferramentas.ocupado && !mostrandoPedido) mostrarOrganizacao(it) }
-    }
-
-    private fun medirVelocidade() {
-        val agora = System.currentTimeMillis()
-        val bytes = Estado.stats.bytesRead.get() + Estado.stats.bytesWritten.get()
-        if (ultimoTempo > 0 && agora > ultimoTempo) {
-            val mbs = (bytes - ultimoBytes) / 1048576.0 / ((agora - ultimoTempo) / 1000.0)
-            velocidade = if (bytes == 0L) "" else String.format(Locale.getDefault(), getString(R.string.velocidade), mbs, bytes / 1048576.0)
-        }
-        ultimoBytes = bytes
-        ultimoTempo = agora
-    }
-
-    // ------------------------------------------------------------------ ações
-
-    private fun servidoresEscolhidos(): Set<String> = buildSet {
-        if (cbSmb.isChecked && rbPasta.isChecked) add(ServidorService.SRV_SMB)
-        if (cbUdpfs.isChecked) add(ServidorService.SRV_UDPFS)
-        if (cbUdpbd.isChecked) add(ServidorService.SRV_UDPBD)
-        if (cbHttp.isChecked && rbPasta.isChecked) add(ServidorService.SRV_HTTP)
-        if (cbNfs.isChecked && rbPasta.isChecked) add(ServidorService.SRV_NFS)
-    }
-
-    private fun iniciarOuParar() {
-        if (Estado.rodando) {
-            ServidorService.parar(this)
-            return
-        }
-        val servidores = servidoresEscolhidos()
-        if (servidores.isEmpty()) return aviso(getString(R.string.av_marque_servidor))
-        if (rbPasta.isChecked) {
-            val pasta = pastaSalva() ?: return aviso(getString(R.string.av_escolha_pasta))
-            if (Fonte.ehSaf(pasta)) {
-                if (!Fonte.temPermissao(this, pasta)) return aviso(getString(R.string.av_saf_de_novo))
-            } else if (!Fonte.ehPriv(pasta) && !temAcessoArquivos()) {
-                aviso(getString(R.string.av_perm_arquivos))
-                abrirPermissaoArquivos()
-                return
-            }
-            when (pastaAbriu) {
-                null -> return aviso(getString(R.string.av_aguarde_pasta))
-                false -> return aviso(getString(R.string.av_pasta_nao_abriu, Fonte.descricao(this, pasta)))
-                true -> {}
-            }
-            ServidorService.iniciar(this, ServidorService.MODO_PASTA, pasta, null, servidores)
-        } else {
-            val nome = listaUsb.findViewById<RadioButton>(listaUsb.checkedRadioButtonId)?.tag as? String
-                ?: return aviso(getString(R.string.av_escolha_usb))
-            val dev = usb.deviceList[nome] ?: return aviso(getString(R.string.av_usb_desconectado)).also { atualizarUsb() }
-            if (usb.hasPermission(dev)) {
-                ServidorService.iniciar(this, ServidorService.MODO_USB, null, nome, servidores)
-            } else {
-                val pi = PendingIntent.getBroadcast(this, 0, Intent(ACAO_PERMISSAO_USB).setPackage(packageName), Compat.MUTAVEL)
-                usb.requestPermission(dev, pi)
-            }
-        }
     }
 
     private fun definirPasta(caminho: String) {
@@ -1201,7 +962,6 @@ class MainActivity : Activity() {
             prefs.edit().putString("pasta", if (novo == ACESSO_NORMAL) visivel else "$novo:${if (novo == Privilegio.ROOT) caminho else visivel}").apply()
         }
         if (novo == ACESSO_NORMAL) Privilegio.fechar()
-        atualizarVolumes()
         verificarPasta()
     }
 
@@ -1210,7 +970,7 @@ class MainActivity : Activity() {
         fundo.execute {
             try {
                 val raiz = Ferramentas.raizDe(this, pasta)
-                for (nome in listOf("DVD", "CD", "ART", "CFG", "CHT", "LNG", "THM", "VMC", "POPS", "APPS")) raiz.child(nome).mkdirs()
+                for (nome in Ferramentas.PASTAS_OPL) raiz.child(nome).mkdirs()
                 runOnUiThread { aviso(getString(R.string.opl_criadas)); verificarPasta() }
             } catch (e: Exception) {
                 runOnUiThread { aviso(getString(R.string.pasta_erro, e.message ?: "")) }
@@ -1283,6 +1043,132 @@ class MainActivity : Activity() {
         return if (rel.isEmpty()) base else "$base/$rel"
     }
 
+    // ------------------------------------------------------------------ ferramentas
+
+    /**
+     * Roda uma ferramenta na pasta escolhida (a raiz é aberta já na thread da tarefa). No fim, o catálogo é
+     * atualizado e, se [arte] e o interruptor estiver ligado, o art.tar é refeito.
+     */
+    private fun tarefa(nome: String, arte: Boolean = false, pendrive: Boolean = false, corpo: (String, VFile) -> String) {
+        val pasta = pastaSalva() ?: return aviso(getString(R.string.av_escolha_pasta))
+        Ferramentas.rodar(this, nome) {
+            if (pendrive) Ferramentas.exigirPendrive(this)
+            val r = Ferramentas.raizDe(this, pasta)
+            val res = corpo(pasta, r)
+            (res + Ferramentas.depois(this, pasta, r, arte)).trim().ifEmpty { getString(R.string.ft_lista_ok) }
+        }
+    }
+
+    /** Monta o plano de Organizar numa tarefa; o resultado volta por [Ferramentas.pedido] e vira um diálogo. */
+    private fun planejarOrganizacao() {
+        val pasta = pastaSalva() ?: return aviso(getString(R.string.av_escolha_pasta))
+        Ferramentas.rodar(this, getString(R.string.ft_planejando), silencioso = true) {
+            val o = Ferramentas.planejarOrganizacao(this, pasta, Ferramentas.raizDe(this, pasta))
+            o.manual = true
+            Ferramentas.pedido = o
+            ""
+        }
+    }
+
+    /** Mostra o que Organizar vai fazer; conversões de PS1 pedem para escolher se apaga os originais. */
+    private fun mostrarOrganizacao(o: Ferramentas.Organizacao) {
+        Ferramentas.pedido = null
+        if (isFinishing) return
+        if (o.vazio) {
+            if (o.manual) aviso(getString(R.string.ft_nada_organizar))
+            return
+        }
+        mostrandoPedido = true
+        val titulo = getString(R.string.ft_btn_organizar)
+        val fazer = { apagar: Boolean ->
+            val conversoes = o.plano.acoes.filter { it.conversao }
+            if (conversoes.isEmpty()) {
+                Ferramentas.rodar(this, titulo) { Ferramentas.executarOrganizacao(this, o, apagar) }
+            } else {
+                // Conversões de PS1 precisam de espaço para o arquivo novo: mesma conferência da compactação
+                comEspaco(apagar, { p, r -> Ferramentas.espacoCom(this, p, r, conversoes.maxOf { it.bytes }) }) { temp ->
+                    Ferramentas.rodar(this, titulo) { Ferramentas.executarOrganizacao(this, o, apagar, temp) }
+                }
+            }
+        }
+        val b = AlertDialog.Builder(this).setTitle(titulo).setMessage(o.resumo(this))
+            .setOnDismissListener { mostrandoPedido = false }
+            .setNegativeButton(R.string.cancelar, null)
+        if (o.plano.conversoes > 0) {
+            b.setPositiveButton(R.string.ft_converter_manter) { _, _ -> fazer(false) }
+            b.setNeutralButton(R.string.ft_converter_apagar) { _, _ -> fazer(true) }
+        } else {
+            b.setPositiveButton(R.string.ok) { _, _ -> fazer(false) }
+        }
+        b.show()
+    }
+
+    /** Confere os arquivos dos loaders (POPStarter, Ember, Neutrino) e mostra a lista. */
+    private fun verificarArquivos() {
+        val pasta = pastaSalva() ?: return
+        aviso(getString(R.string.ft_lendo))
+        fundo.execute {
+            val texto = try {
+                Ferramentas.verificar(this, pasta, Ferramentas.raizDe(this, pasta))
+            } catch (e: Exception) {
+                getString(R.string.pasta_erro, e.message ?: e.javaClass.simpleName)
+            }
+            runOnUiThread { if (!isFinishing) dialogo(getString(R.string.ft_btn_verificar), texto) }
+        }
+    }
+
+    /**
+     * Compacta (ISO → ZSO) ou descompacta um jogo, trocando o arquivo depois de conferido. Se faltar espaço na
+     * pasta, oferece montar em outro volume e trazer de volta.
+     */
+    private fun compactarComEspaco(itens: List<Catalogo.Item>, compactar: Boolean, titulo: String) {
+        comEspaco(true, { p, r -> Ferramentas.espacoPara(this, p, r, itens, compactar) }) { temp ->
+            tarefa(titulo, pendrive = true) { _, r ->
+                val jogos = Ferramentas.jogosDe(r, itens)
+                if (compactar) Ferramentas.compactar(this, jogos, true, temp) else Ferramentas.descompactar(this, jogos, true, temp)
+            }
+        }
+    }
+
+    /** Confere o espaço com [calcular] (numa thread) e roda [rodar] com a pasta temporária escolhida, ou null. */
+    private fun comEspaco(apagar: Boolean, calcular: (String, VFile) -> Ferramentas.Espaco, rodar: (File?) -> Unit) {
+        val pasta = pastaSalva() ?: return
+        if (apagar && Estado.rodando) {
+            // Com o servidor ligado o PS2 pode estar com o jogo aberto: apagar não libera o espaço até ele fechar,
+            // e o arquivo novo não caberia na volta. Para antes (os arquivos fecham em segundo plano).
+            AlertDialog.Builder(this).setTitle(R.string.esp_titulo).setMessage(R.string.esp_servidor)
+                .setPositiveButton(R.string.esp_parar) { _, _ ->
+                    ServidorService.parar(this)
+                    handler.postDelayed({ if (!isFinishing) comEspaco(apagar, calcular, rodar) }, 3000)
+                }
+                .setNegativeButton(R.string.cancelar, null).show()
+            return
+        }
+        fundo.execute {
+            val e = try { calcular(pasta, Ferramentas.raizDe(this, pasta)) } catch (ex: Exception) { null }
+            runOnUiThread {
+                if (isFinishing) return@runOnUiThread
+                if (e == null || !e.falta) return@runOnUiThread rodar(null)
+                val gb = { b: Long -> String.format(Locale.getDefault(), "%.1f GB", b / 1073741824.0) }
+                val lugar = e.lugar
+                if (lugar != null) {
+                    AlertDialog.Builder(this).setTitle(R.string.esp_titulo)
+                        .setMessage(getString(R.string.esp_temporario, gb(e.precisa), gb(e.livre), lugar.nome, gb(lugar.livre)) +
+                            if (apagar) "" else "\n\n" + getString(R.string.esp_manter_aviso))
+                        .setPositiveButton(R.string.esp_usar) { _, _ -> rodar(lugar.dir) }
+                        .setNegativeButton(R.string.cancelar, null).show()
+                } else {
+                    AlertDialog.Builder(this).setTitle(R.string.esp_titulo)
+                        .setMessage(getString(R.string.esp_nenhum, gb(e.precisa), gb(e.livre), gb(e.precisa - e.livre)) +
+                            e.lugares.joinToString("") { "\n• ${it.nome}: ${gb(it.livre)}" })
+                        .setPositiveButton(R.string.ok, null).show()
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ sistema
+
     private fun abrirAncoragem() {
         val tentativas = listOf(
             Intent().setClassName("com.android.settings", "com.android.settings.Settings\$TetherSettingsActivity"),
@@ -1333,9 +1219,8 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun copiarLog() {
-        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        cm.setPrimaryClip(ClipData.newPlainText(getString(R.string.app_name), Estado.texto()))
+    private fun copiar(t: String) {
+        (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText(getString(R.string.app_name), t))
         aviso(getString(R.string.log_copiado))
     }
 
@@ -1346,9 +1231,19 @@ class MainActivity : Activity() {
         private const val REQ_SHIZUKU = 11
         private const val ACESSO_NORMAL = "normal"
         private const val ACAO_PERMISSAO_USB = "br.ps2ponte.PERMISSAO_USB"
+        private const val PREF_PROTOCOLO = "protocolo"
+
+        /** (servidor, nome, para quem) */
+        private val PROTOCOLOS = listOf(
+            Triple(ServidorService.SRV_UDPFS, "UDPFS", "NHDDL · Neutrino · RiptOPL"),
+            Triple(ServidorService.SRV_SMB, "SMB", "OPL · RiptOPL"),
+            Triple(ServidorService.SRV_UDPBD, "UDPBD", "Neutrino · XEB+"),
+            Triple(ServidorService.SRV_NFS, "NFS", "Neutrino · RiptOPL"),
+            Triple(ServidorService.SRV_HTTP, "HTTP", "RiptOPL"),
+        )
 
         private const val COR_CARTAO = 0x1A808080
-        private const val COR_NEUTRA = 0x26808080
+        private const val COR_ESCOLHIDO = 0x4D3F8CFF
         private const val COR_OK = 0x3322AA55
         private const val COR_ALERTA = 0x40E0A020
     }

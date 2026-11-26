@@ -103,7 +103,6 @@ object Ferramentas {
     @Volatile private var ultimaRotina = 0L
 
     const val PREF_AUTO_TAR = "auto_tar"
-    const val PREF_AUTO_ZSO = "auto_zso"
     const val PREF_AUTO_ORGANIZAR = "auto_organizar"
     const val PREF_PS1_DESTINO = "ps1_destino"
 
@@ -151,10 +150,6 @@ object Ferramentas {
                     else pedido = o // a tela pergunta antes de converter
                     c = catalogo ?: c
                 }
-            }
-            if (podeMexer && prefs.getBoolean(PREF_AUTO_ZSO, false) && !Estado.rodando && c.isos.isNotEmpty()) {
-                msgs += ctx.getString(R.string.ft_auto_zso) + " " + compactar(ctx, jogosDe(raiz, c.isos), apagarOriginal = true)
-                c = atualizarCatalogo(ctx, pasta, raiz)
             }
             if (prefs.getBoolean(PREF_AUTO_TAR, false) && c.tarDesatualizado) {
                 msgs += ctx.getString(R.string.ft_auto_tar) + " " + empacotarArt(ctx, raiz)
@@ -318,34 +313,124 @@ object Ferramentas {
 
     private fun arquivosArt(raiz: VFile): List<VFile> = pasta(raiz, "ART")?.listFiles()?.filter { it.isFile } ?: emptyList()
 
+    // ------------------------------------------------------------------ arte e fichas automáticas
+
+    /** Banco de arte do OPL (pasta por código, PS2 e PS1): COV, COV2, ICO, LAB, LGO, BG_00…, SCR_00… */
+    private const val ARTE_DB = "https://raw.githubusercontent.com/Luden02/psx-ps2-opl-art-database/main"
+    /** Fichas dos jogos de PS2 no formato do OPL (título, descrição, gênero, ano, desenvolvedora…). */
+    private const val CFG_DB = "https://raw.githubusercontent.com/Tom-Bruise/PS2-OPL-CFG-Database/master/CFG_en"
+
+    /** (nome no banco, sufixo no OPL, largura e altura máximas) */
+    private val TIPOS_ARTE = listOf(
+        Triple("COV", "COV", 0), Triple("COV2", "COV2", 0), Triple("ICO", "ICO", 1), Triple("LAB", "LAB", 1),
+        Triple("LGO", "LGO", 1), Triple("BG_00", "BG", 2), Triple("SCR_00", "SCR", 2), Triple("SCR_01", "SCR2", 2),
+    )
+
+    @Volatile private var ultimaArte = 0L
+    @Volatile private var arteDe: String? = null
+
     /**
-     * Baixa as capas que faltam (bancos xlenore/ps2-covers e psx-covers) e grava como PNG 8 bits com o nome que
-     * cada loader procura: ART/<código>_COV.png (PS2), ART/<nome do VCD>_COV.png (POPS), ART/<pasta>_COV.png (Ember).
+     * Toda vez que a aba Jogos abre: baixa sozinho a arte que falta (capa, verso, ícone, logo, fundo, capturas) e a
+     * ficha de cada jogo, sem perguntar. Cada jogo é tentado uma vez por semana (o que não existe no banco não é
+     * pedido de novo a cada abertura). Silencioso: só escreve no log se baixou algo.
      */
-    fun baixarCapas(ctx: Context, pasta: String, raiz: VFile, maxL: Int, maxA: Int, so: String? = null): String {
+    fun rotinaArte(ctx: Context, pasta: String, forcar: Boolean = false) {
+        val agora = System.currentTimeMillis()
+        if (ocupado || (!forcar && arteDe == pasta && agora - ultimaArte < 120_000)) return
+        ultimaArte = agora
+        arteDe = pasta
+        val prefs = ctx.getSharedPreferences("ps2ponte", Context.MODE_PRIVATE)
+        rodar(ctx, ctx.getString(R.string.ft_arte), silencioso = true) {
+            val raiz = raizDe(ctx, pasta)
+            val c = atualizarCatalogo(ctx, pasta, raiz)
+            val msg = try { baixarArte(ctx, pasta, raiz, c, prefs.getBoolean("capa_grande", false)) } catch (e: IOException) { "" }
+            val c2 = catalogo ?: c
+            val tar = if (prefs.getBoolean(PREF_AUTO_TAR, false) && c2.tarDesatualizado) {
+                "\n" + ctx.getString(R.string.ft_auto_tar) + " " + empacotarArt(ctx, raiz).also { atualizarCatalogo(ctx, pasta, raiz) }
+            } else ""
+            (msg + tar).trim()
+        }
+    }
+
+    private fun arqTentativas(ctx: Context, pasta: String) = File(ctx.filesDir, "arte-${Integer.toHexString(pasta.hashCode())}.txt")
+
+    private fun baixarArte(ctx: Context, pasta: String, raiz: VFile, c: Catalogo, capaGrande: Boolean): String {
+        val semana = 7L * 24 * 3600 * 1000
+        val agora = System.currentTimeMillis()
+        val arq = arqTentativas(ctx, pasta)
+        val tentadas = HashMap<String, Long>()
+        try { arq.takeIf { it.exists() }?.readLines()?.forEach { l -> l.split('\t').takeIf { it.size == 2 }?.let { tentadas[it[0]] = it[1].toLongOrNull() ?: 0 } } } catch (_: IOException) {}
+
         val art = pasta(raiz, "ART") ?: raiz.child("ART").also { it.mkdirs() }
         val existentes = arquivosArt(raiz).map { it.name.uppercase() }.toHashSet()
-        val lista = atualizarCatalogo(ctx, pasta, raiz).jogos.filter { !it.foraDoLugar && (so == null || it.rel == so) }
-        var baixadas = 0
-        var semId = 0
-        val naoAchadas = mutableListOf<String>()
+        val cfgDir by lazy { pasta(raiz, "CFG") ?: raiz.child("CFG").also { it.mkdirs() } }
+        val lista = c.jogos.filter { !it.foraDoLugar && it.id != null && it.chaveArte != null }
+            .filter { agora - (tentadas["${it.tipo}:${it.chaveArte}"] ?: 0L) > semana }
+        var imagens = 0
+        var fichas = 0
         lista.forEachIndexed { i, j ->
             passo(i.toLong(), lista.size.toLong(), j.nome)
-            val id = j.id ?: run { semId++; return@forEachIndexed }
-            val chave = j.chaveArte ?: return@forEachIndexed
-            if (existentes.any { it.startsWith("${chave.uppercase()}_COV.") }) return@forEachIndexed
-            val banco = if (j.ps1) "psx-covers" else "ps2-covers"
-            val bytes = baixar(ctx, "https://raw.githubusercontent.com/xlenore/$banco/main/covers/default/${IdJogo.serial(id)}.jpg")
-            if (bytes == null) { naoAchadas += id; return@forEachIndexed }
-            val png = paraPng8(bytes, maxL, maxA) ?: run { naoAchadas += id; return@forEachIndexed }
-            gravar(art.child("${chave}_COV.png"), png)
-            existentes += "${chave.uppercase()}_COV.PNG"
-            baixadas++
+            val id = j.id!!
+            val chave = j.chaveArte!!
+            val sistema = if (j.ps1) "PS1" else "PS2"
+            for ((origem, sufixo, tam) in TIPOS_ARTE) {
+                if (existentes.any { it.startsWith("${chave.uppercase()}_$sufixo.") }) continue
+                var bytes = baixar(ctx, "$ARTE_DB/$sistema/$id/${id}_$origem.png")
+                if (bytes == null && sufixo == "COV") {
+                    bytes = baixar(ctx, "https://raw.githubusercontent.com/xlenore/${if (j.ps1) "psx-covers" else "ps2-covers"}/main/covers/default/${IdJogo.serial(id)}.jpg")
+                }
+                bytes ?: continue
+                val (l, a) = when (tam) {
+                    0 -> if (capaGrande) 280 to 400 else 140 to 200
+                    1 -> 256 to 256
+                    else -> 640 to 480
+                }
+                val png = paraPng8(bytes, l, a) ?: continue
+                gravar(art.child("${chave}_$sufixo.png"), png)
+                existentes += "${chave.uppercase()}_$sufixo.PNG"
+                imagens++
+            }
+            // Ficha (PS2): completa o CFG do jogo sem mexer nas configurações que já estão lá
+            if (!j.ps1 && completarFicha(ctx, cfgDir, id)) fichas++
+            tentadas["${j.tipo}:$chave"] = agora
         }
-        val sb = StringBuilder(ctx.getString(R.string.ft_capas_baixadas, baixadas, lista.size))
-        if (semId > 0) sb.append("\n").append(ctx.getString(R.string.ft_sem_id, semId))
-        if (naoAchadas.isNotEmpty()) sb.append("\n").append(ctx.getString(R.string.ft_capas_nao_achadas, naoAchadas.joinToString()))
-        return sb.toString()
+        try { arq.writeText(tentadas.entries.joinToString("\n") { "${it.key}\t${it.value}" }) } catch (_: IOException) {}
+        if (imagens + fichas > 0) atualizarCatalogo(ctx, pasta, raiz)
+        return if (imagens + fichas == 0) "" else ctx.getString(R.string.ft_arte_ok, imagens, fichas)
+    }
+
+    /** Chaves de informação do OPL (as de compatibilidade, "$…", nunca são tocadas). */
+    private val CHAVES_FICHA = setOf("Title", "Description", "Genre", "Release", "Developer", "Publisher", "Players",
+        "Aspect", "AspectText", "Scan", "ScanText", "Rating", "RatingText", "Parental", "ParentalText", "Vmode", "VmodeText", "Device", "DeviceText")
+
+    private fun completarFicha(ctx: Context, cfgDir: VFile, id: String): Boolean {
+        val f = cfgDir.listFiles()?.firstOrNull { it.name.equals("$id.cfg", true) } ?: cfgDir.child("$id.cfg")
+        val atual = if (f.exists()) String(ler(f), Charsets.UTF_8) else ""
+        if (atual.lines().any { it.startsWith("Description=") }) return false
+        val db = baixar(ctx, "$CFG_DB/$id.cfg")?.toString(Charsets.UTF_8) ?: return false
+        val tem = atual.lines().mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotEmpty() } }.toHashSet()
+        val novas = db.lines().filter { l ->
+            val k = l.substringBefore('=', "")
+            k in CHAVES_FICHA && k !in tem && l.length > k.length + 1
+        }
+        if (novas.isEmpty()) return false
+        val texto = buildString {
+            if (atual.isEmpty()) append("CfgVersion=8\r\n") else append(atual.trimEnd()).append("\r\n")
+            novas.forEach { append(it.trimEnd()).append("\r\n") }
+        }
+        gravar(f, texto.toByteArray(Charsets.UTF_8))
+        return true
+    }
+
+    /** Ficha do jogo para a tela de detalhes (Título, Gênero, Ano, Descrição…), do CFG/<código>.cfg. */
+    fun ficha(raiz: VFile, id: String): Map<String, String> = try {
+        val cfg = pasta(raiz, "CFG")?.listFiles()?.firstOrNull { it.name.equals("$id.cfg", true) }
+        cfg?.let { String(ler(it), Charsets.UTF_8) }?.lines()?.mapNotNull { l ->
+            val k = l.substringBefore('=', "")
+            if (k in CHAVES_FICHA) k to l.substringAfter('=').trim() else null
+        }?.toMap() ?: emptyMap()
+    } catch (e: Exception) {
+        emptyMap()
     }
 
     /** Arquivos dos loaders (POPStarter, Ember, Neutrino, pastas do OPL). */
