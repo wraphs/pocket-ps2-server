@@ -4,7 +4,6 @@ import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.Dialog
-import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -15,7 +14,7 @@ import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
-import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbManager
 import android.net.Uri
 import android.os.Build
@@ -46,7 +45,6 @@ import br.ps2ponte.core.ferramentas.Catalogo
 import br.ps2ponte.core.ferramentas.OrganizadorPs1
 import br.ps2ponte.core.fs.VFile
 import br.ps2ponte.priv.Privilegio
-import br.ps2ponte.usb.UsbMassStorage
 import rikka.shizuku.Shizuku
 import java.io.File
 import java.util.Locale
@@ -63,7 +61,6 @@ import java.util.concurrent.Executors
 class MainActivity : Activity() {
 
     private lateinit var prefs: SharedPreferences
-    private lateinit var usb: UsbManager
     private val fundo = Executors.newSingleThreadExecutor()
     private val handler = Handler(Looper.getMainLooper())
 
@@ -117,23 +114,12 @@ class MainActivity : Activity() {
         }
     }
 
-    /** Resposta do pedido de permissão USB (só o próprio app manda: não exportado). */
-    private val receptorPermissao = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            @Suppress("DEPRECATION")
-            val dev: UsbDevice? = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
-            else intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
-            if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false) && dev != null) {
-                ServidorService.iniciar(this@MainActivity, ServidorService.MODO_USB, null, dev.deviceName, setOf(protocolo()))
-            } else {
-                aviso(getString(R.string.av_usb_sem_perm))
-            }
-        }
-    }
-
-    /** Pendrive conectado/desconectado (aviso do sistema). */
+    /** Pendrive conectado/desconectado (aviso do sistema): a lista de lugares e o aviso de formato mudam. */
     private val receptorUsb = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) = atualizarEstado()
+        override fun onReceive(context: Context, intent: Intent) {
+            // O Android leva um instante para montar o pendrive depois de conectado
+            handler.postDelayed({ atualizarEstado() }, 1500)
+        }
     }
 
     private val ouvinteShizuku = Shizuku.OnRequestPermissionResultListener { _, resultado ->
@@ -147,11 +133,10 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = getSharedPreferences("ps2ponte", MODE_PRIVATE)
-        usb = getSystemService(Context.USB_SERVICE) as UsbManager
         estilo = estilos.firstOrNull { it.id == prefs.getString("estilo", "compacto") } ?: estilos.first()
         setContentView(montarTela())
+        migrarModoPendrive()
 
-        Compat.registrar(this, receptorPermissao, IntentFilter(ACAO_PERMISSAO_USB), exportado = false)
         val filtro = IntentFilter().apply {
             addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
             addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
@@ -178,7 +163,6 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         Estado.esquecer(ouvinte)
-        unregisterReceiver(receptorPermissao)
         unregisterReceiver(receptorUsb)
         if (Build.VERSION.SDK_INT >= 23) try { Shizuku.removeRequestPermissionResultListener(ouvinteShizuku) } catch (_: Throwable) {}
         fundo.shutdown()
@@ -399,7 +383,27 @@ class MainActivity : Activity() {
 
     private fun protocolo(): String = prefs.getString(PREF_PROTOCOLO, null)?.takeIf { p -> PROTOCOLOS.any { it.first == p } } ?: ServidorService.SRV_UDPFS
 
-    private fun modoUsb() = prefs.getString("modo", ServidorService.MODO_PASTA) == ServidorService.MODO_USB
+    /**
+     * O modo "pendrive inteiro" (o PS2 lendo o disco cru) saiu: o modo pasta faz o mesmo, mais rápido e com a grade.
+     * Quem estava nele volta para o modo pasta, com um aviso uma vez só.
+     */
+    private fun migrarModoPendrive() {
+        if (prefs.getString("modo", null) != "usb") return
+        prefs.edit().remove("modo").remove("usb").apply()
+        AlertDialog.Builder(this).setTitle(R.string.mig_titulo).setMessage(R.string.mig_pendrive)
+            .setPositiveButton(R.string.ok, null).show()
+    }
+
+    /** Há um pendrive conectado que o Android não montou (formato que o sistema não lê)? */
+    private fun pendriveNaoMontado(): Boolean {
+        val usb = getSystemService(Context.USB_SERVICE) as? UsbManager ?: return false
+        val temArmazenamento = try {
+            usb.deviceList.values.any { d -> (0 until d.interfaceCount).any { d.getInterface(it).interfaceClass == UsbConstants.USB_CLASS_MASS_STORAGE } }
+        } catch (e: Exception) { false }
+        return temArmazenamento && Compat.volumes(this).none { !it.primario }
+    }
+
+    private fun mostrarPendriveNaoMontado() = dialogo(getString(R.string.usb_nao_montado_titulo), getString(R.string.usb_nao_montado))
 
     private fun ipCelular() = Rede.cabo()?.ip ?: getString(R.string.ip_celular)
     private fun ipPs2() = Rede.cabo()?.let { Rede.sugestaoPs2(it.ip) } ?: getString(R.string.ip_ps2)
@@ -419,14 +423,12 @@ class MainActivity : Activity() {
 
     /** O que impede iniciar agora (texto da dica, rótulo e ação do botão), ou null se está tudo pronto. */
     private fun impedimento(): Triple<String, String?, (() -> Unit)?>? {
-        val p = protocolo()
         return when {
             Rede.cabo() == null -> Triple(getString(R.string.hint_sem_cabo), getString(R.string.btn_ancoragem)) { abrirAncoragem() }
-            modoUsb() && p !in setOf(ServidorService.SRV_UDPFS, ServidorService.SRV_UDPBD) ->
-                Triple(getString(R.string.hint_prot_pasta), getString(R.string.btn_ir_jogos)) { mostrarAba(true) }
-            modoUsb() && UsbMassStorage.list(usb).isEmpty() ->
-                Triple(getString(R.string.usb_nenhum), getString(R.string.btn_ir_jogos)) { mostrarAba(true) }
-            !modoUsb() && pastaAbriu != true ->
+            // Pendrive conectado num formato que o Android não abre: nem pasta nem protocolo resolvem
+            pastaAbriu != true && pendriveNaoMontado() ->
+                Triple(getString(R.string.usb_nao_montado_curto), getString(R.string.usb_nao_montado_titulo)) { mostrarPendriveNaoMontado() }
+            pastaAbriu != true ->
                 Triple(if (pastaAbriu == null && pastaSalva() != null) getString(R.string.pasta_verificando) else getString(R.string.hint_sem_pasta),
                     getString(R.string.btn_ir_jogos)) { mostrarAba(true) }
             else -> null
@@ -492,18 +494,13 @@ class MainActivity : Activity() {
     }
 
     /** Pasta pronta para as ferramentas e a grade (modo pasta e já aberta), ou null. */
-    private fun pastaUsavel(): String? = pastaSalva()?.takeIf { !modoUsb() && pastaAbriu == true }
+    private fun pastaUsavel(): String? = pastaSalva()?.takeIf { pastaAbriu == true }
 
     private fun atualizarJogos() {
         if (!::tvLocal.isInitialized) return
         val pasta = pastaSalva()
         // Onde estão os jogos
-        if (modoUsb()) {
-            val dev = UsbMassStorage.list(usb).firstOrNull { it.deviceName == prefs.getString("usb", null) } ?: UsbMassStorage.list(usb).firstOrNull()
-            tvLocal.text = getString(R.string.jg_usb_modo, dev?.let { UsbMassStorage.label(it) } ?: getString(R.string.usb_nenhum))
-            tvLocalEstado.text = getString(R.string.jg_usb_ajuda)
-            btnLocalAcao.visibility = View.GONE
-        } else {
+        run {
             tvLocal.text = pasta?.let { Fonte.descricao(this, it) } ?: getString(R.string.jg_escolher)
             val precisaArquivos = pasta != null && acesso() == ACESSO_NORMAL && !Fonte.ehSaf(pasta) && !Fonte.ehPriv(pasta) && !temAcessoArquivos()
             tvLocalEstado.text = when {
@@ -516,6 +513,7 @@ class MainActivity : Activity() {
                 else -> ""
             }
             when {
+                pendriveNaoMontado() && pastaAbriu != true -> mostrarAcaoLocal(getString(R.string.usb_nao_montado_titulo)) { mostrarPendriveNaoMontado() }
                 precisaArquivos -> mostrarAcaoLocal(getString(R.string.btn_perm_arquivos)) { abrirPermissaoArquivos() }
                 temOpl == false && pastaAbriu == true -> mostrarAcaoLocal(getString(R.string.btn_criar_opl)) { criarPastasOpl() }
                 else -> btnLocalAcao.visibility = View.GONE
@@ -554,7 +552,6 @@ class MainActivity : Activity() {
 
     private fun atualizarVazio() {
         tvVazio.text = when {
-            modoUsb() -> ""
             pastaSalva() == null -> getString(R.string.jg_escolha_local)
             pastaAbriu != true -> ""
             Ferramentas.catalogo == null -> getString(R.string.ft_resumo_vazio)
@@ -571,23 +568,14 @@ class MainActivity : Activity() {
         val opcoes = mutableListOf<Pair<String, () -> Unit>>()
         for (v in Compat.volumes(this)) {
             val rotulo = if (v.primario) getString(R.string.btn_vol, v.descricao) else getString(R.string.btn_vol_usb, v.descricao)
-            opcoes += rotulo to { usarModoPasta(); escolherVolume(v, modo) }
+            opcoes += rotulo to { escolherVolume(v, modo) }
         }
-        opcoes += getString(if (modo == ACESSO_NORMAL) R.string.btn_outra_pasta else R.string.btn_digitar) to { usarModoPasta(); outraPasta() }
-        for (d in UsbMassStorage.list(usb)) {
-            opcoes += getString(R.string.jg_opcao_usb, UsbMassStorage.label(d)) to {
-                prefs.edit().putString("modo", ServidorService.MODO_USB).putString("usb", d.deviceName).apply()
-                if (protocolo() !in setOf(ServidorService.SRV_UDPFS, ServidorService.SRV_UDPBD)) prefs.edit().putString(PREF_PROTOCOLO, ServidorService.SRV_UDPFS).apply()
-                atualizarEstado()
-            }
-        }
+        opcoes += getString(if (modo == ACESSO_NORMAL) R.string.btn_outra_pasta else R.string.btn_digitar) to { outraPasta() }
+        // Pendrive conectado que o Android não abriu: não dá para escolher; explica o porquê
+        if (pendriveNaoMontado()) opcoes += ("⚠ " + getString(R.string.usb_nao_montado_titulo)) to { mostrarPendriveNaoMontado() }
         AlertDialog.Builder(this).setTitle(R.string.jg_local_titulo)
             .setItems(opcoes.map { it.first }.toTypedArray()) { _, i -> opcoes[i].second() }
             .setNegativeButton(R.string.cancelar, null).show()
-    }
-
-    private fun usarModoPasta() {
-        prefs.edit().putString("modo", ServidorService.MODO_PASTA).apply()
     }
 
     /** Detalhes do jogo: ficha (do CFG), capa e as ações que cabem a ele. */
@@ -835,27 +823,14 @@ class MainActivity : Activity() {
             return
         }
         impedimento()?.let { return aviso(it.first) }
-        val servidores = setOf(protocolo())
-        if (!modoUsb()) {
-            val pasta = pastaSalva() ?: return aviso(getString(R.string.av_escolha_pasta))
-            if (Fonte.ehSaf(pasta) && !Fonte.temPermissao(this, pasta)) return aviso(getString(R.string.av_saf_de_novo))
-            if (!Fonte.ehSaf(pasta) && !Fonte.ehPriv(pasta) && !temAcessoArquivos()) {
-                aviso(getString(R.string.av_perm_arquivos))
-                abrirPermissaoArquivos()
-                return
-            }
-            ServidorService.iniciar(this, ServidorService.MODO_PASTA, pasta, null, servidores)
-        } else {
-            val devs = UsbMassStorage.list(usb)
-            val dev = devs.firstOrNull { it.deviceName == prefs.getString("usb", null) } ?: devs.firstOrNull()
-                ?: return aviso(getString(R.string.av_usb_desconectado))
-            if (usb.hasPermission(dev)) {
-                ServidorService.iniciar(this, ServidorService.MODO_USB, null, dev.deviceName, servidores)
-            } else {
-                val pi = PendingIntent.getBroadcast(this, 0, Intent(ACAO_PERMISSAO_USB).setPackage(packageName), Compat.MUTAVEL)
-                usb.requestPermission(dev, pi)
-            }
+        val pasta = pastaSalva() ?: return aviso(getString(R.string.av_escolha_pasta))
+        if (Fonte.ehSaf(pasta) && !Fonte.temPermissao(this, pasta)) return aviso(getString(R.string.av_saf_de_novo))
+        if (!Fonte.ehSaf(pasta) && !Fonte.ehPriv(pasta) && !temAcessoArquivos()) {
+            aviso(getString(R.string.av_perm_arquivos))
+            abrirPermissaoArquivos()
+            return
         }
+        ServidorService.iniciar(this, pasta, setOf(protocolo()))
     }
 
     // ------------------------------------------------------------------ pasta dos jogos
@@ -900,8 +875,8 @@ class MainActivity : Activity() {
         val pasta = pastaSalva()
         val minha = ++verificacao
         erroPasta = null
-        if (pasta == null || modoUsb()) {
-            pastaAbriu = if (pasta == null) false else pastaAbriu
+        if (pasta == null) {
+            pastaAbriu = false
             atualizarEstado()
             return
         }
@@ -1230,7 +1205,6 @@ class MainActivity : Activity() {
         private const val REQ_PASTA = 10
         private const val REQ_SHIZUKU = 11
         private const val ACESSO_NORMAL = "normal"
-        private const val ACAO_PERMISSAO_USB = "br.ps2ponte.PERMISSAO_USB"
         private const val PREF_PROTOCOLO = "protocolo"
 
         /** (servidor, nome, para quem) */

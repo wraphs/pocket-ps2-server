@@ -44,7 +44,6 @@
     <string name="btn_digitar">Type a path…</string>
     <string name="btn_criar_opl">Create OPL folders (DVD, CD, ART…)</string>
     <string name="opl_criadas">Folders created. Put the .iso files in DVD (or CD).</string>
-    <string name="usb_nenhum">No USB drive/HDD found.</string>
     <string name="caminho_titulo">Folder path</string>
 
     <!-- 3 · PS2 -->
@@ -62,8 +61,6 @@
     <string name="av_escolha_pasta">Choose a folder first</string>
     <string name="av_saf_de_novo">Tap the USB drive again to allow access</string>
     <string name="av_perm_arquivos">Allow file access first</string>
-    <string name="av_usb_desconectado">USB drive disconnected</string>
-    <string name="av_usb_sem_perm">No permission to use the USB drive</string>
     <string name="av_nao_e_armazenamento">That folder isn\'t on the phone or USB drive storage</string>
     <string name="av_saf_sem_persistir">Android didn\'t grant permanent access to this folder</string>
     <string name="av_seletor_falhou">Couldn\'t open the folder picker</string>
@@ -78,19 +75,12 @@
     <!-- Service log -->
     <string name="log_pasta">Folder: %1$s</string>
     <string name="log_montando">Building the virtual exFAT disk…</string>
-    <string name="log_pendrive">USB drive: %1$s, %2$.1f GiB%3$s</string>
-    <string name="log_protegido">, write-protected</string>
-    <string name="log_particoes">Partitions: %1$s</string>
-    <string name="log_ntfs">⚠ NTFS drive: in block mode the PS2 only reads exFAT/FAT32. Use Folder mode (works with NTFS) or format it as exFAT.</string>
-    <string name="log_fs_desconhecido">⚠ No exFAT/FAT32 found on this disk; the PS2 may not see the games in block mode.</string>
     <string name="log_porta_falhou">%1$s: couldn\'t open the port (%2$s)</string>
     <string name="log_ligado">%1$s on</string>
     <string name="log_nenhum">no server started</string>
     <string name="log_erro">Error: %1$s</string>
     <string name="log_parado">Server stopped</string>
-    <string name="log_usb_saiu">USB drive disconnected</string>
     <string name="err_pasta_sumiu">folder not found: %1$s</string>
-    <string name="err_usb_sumiu">USB drive not found (was it unplugged?)</string>
     <string name="servindo">Serving: %1$s</string>
 
     <!-- Hints (diagnosis) -->
@@ -128,9 +118,6 @@
     <string name="ft_organizado">Folder organized: %1$d game(s) moved.</string>
     <string name="ft_nao_movidos">Not moved (already in the destination or Android refused): %1$s</string>
     <string name="ft_nomes_longos">⚠ %1$d game(s) with names over 64 characters: some loaders cut or hide them.</string>
-    <string name="ft_capas_baixadas">Covers: %1$d downloaded (of %2$d games).</string>
-    <string name="ft_sem_id">%1$d game(s) without a readable code (CD image as .bin, unusual image).</string>
-    <string name="ft_capas_nao_achadas">No cover in the database: %1$s</string>
     <string name="ft_sem_internet">no internet on the phone (the PS2 cable has none; use Wi-Fi or mobile data)</string>
     <string name="ft_capas_corrigidas">Covers: %1$d converted to 8-bit PNG (of %2$d images).</string>
     <string name="ft_capas_falharam">Could not read: %1$s</string>
@@ -151,7 +138,6 @@
     <string name="ft_lista_ok">Game list updated.</string>
     <string name="ft_lendo_jogo">Reading %1$s</string>
     <string name="ft_atualizando">Updating the game list</string>
-    <string name="ft_auto_zso">Automatic compression:</string>
     <string name="ft_auto_tar">Automatic art.tar:</string>
     <string name="ft_btn_verificar">Check loader files</string>
     <string name="ft_verif_nada">Nothing to check yet (no POPS/, EMBER/ or NEUTRINO/).</string>
@@ -212,18 +198,19 @@
     <string name="ps2_titulo">On the PS2 › Network settings</string>
     <string name="hint_sem_cabo">Nothing on the cable. Plug the hub into the phone and the cable into the PS2, and check that Ethernet tethering is on.</string>
     <string name="hint_sem_pasta">Choose where the games are on the Games tab.</string>
-    <string name="hint_prot_pasta">With a whole USB drive, only UDPFS and UDPBD work. Pick one of them or use a folder.</string>
     <string name="btn_ir_jogos">Go to Games</string>
     <string name="ip_celular">phone-IP</string>
     <string name="ip_ps2">PS2-IP</string>
     <string name="jg_local_titulo">Where the games are</string>
     <string name="jg_escolher">Tap to choose…</string>
-    <string name="jg_usb_modo">🔌 Whole USB drive: %1$s</string>
-    <string name="jg_usb_ajuda">The PS2 reads the drive directly (UDPFS/UDPBD). The game list is not shown in this mode.</string>
-    <string name="jg_opcao_usb">🔌 Whole USB drive (block mode): %1$s</string>
     <string name="jg_resumo">%1$d PS2 · %2$d PS1</string>
     <string name="jg_escolha_local">Tap \"Where the games are\" and choose the folder (phone, SD card or USB drive).</string>
     <string name="log_vazio">The log shows up here when the server starts.</string>
     <string name="ft_arte">Updating covers and game info</string>
     <string name="ft_arte_ok">Art: %1$d image(s) and %2$d game info file(s) downloaded.</string>
+    <string name="mig_titulo">Whole-drive mode removed</string>
+    <string name="mig_pendrive">The mode where the PS2 read the whole USB drive directly is gone. Folder mode does the same, faster, and shows the games with covers.\n\nOn the Games tab, tap \"Where the games are\" and choose the drive.</string>
+    <string name="usb_nao_montado_titulo">Drive didn\'t open</string>
+    <string name="usb_nao_montado_curto">A USB drive is connected, but Android couldn\'t open it.</string>
+    <string name="usb_nao_montado">A USB drive is connected, but Android didn\'t open it: this phone can\'t read its format (ext4, HFS+, or NTFS on some phones), so no protocol can serve its games.\n\nWhat to do:\n• Format the drive as exFAT on a PC (copy the games first) — it works with every protocol and saves covers and saves;\n• or copy the games to the phone storage or to an SD card.\n\nIf it is FAT32, keep in mind DVD games over 4 GB don\'t fit in that format.</string>
 </resources>

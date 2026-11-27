@@ -43,7 +43,6 @@
     <string name="btn_digitar">Digitar caminho…</string>
     <string name="btn_criar_opl">Criar pastas do OPL (DVD, CD, ART…)</string>
     <string name="opl_criadas">Pastas criadas. Coloque os .iso em DVD (ou CD).</string>
-    <string name="usb_nenhum">Nenhum pendrive/HD USB encontrado.</string>
     <string name="caminho_titulo">Caminho da pasta</string>
 
     <!-- 3 · PS2 -->
@@ -61,8 +60,6 @@
     <string name="av_escolha_pasta">Escolha uma pasta primeiro</string>
     <string name="av_saf_de_novo">Toque de novo no pendrive para liberar o acesso</string>
     <string name="av_perm_arquivos">Permita o acesso aos arquivos primeiro</string>
-    <string name="av_usb_desconectado">Pendrive desconectado</string>
-    <string name="av_usb_sem_perm">Sem permissão para usar o pendrive</string>
     <string name="av_nao_e_armazenamento">Essa pasta não é do armazenamento do celular/pendrive</string>
     <string name="av_saf_sem_persistir">O Android não liberou o acesso permanente a essa pasta</string>
     <string name="av_seletor_falhou">Não consegui abrir o seletor de pastas</string>
@@ -77,19 +74,12 @@
     <!-- Log do serviço -->
     <string name="log_pasta">Pasta: %1$s</string>
     <string name="log_montando">Montando o disco exFAT virtual…</string>
-    <string name="log_pendrive">Pendrive: %1$s, %2$.1f GiB%3$s</string>
-    <string name="log_protegido">, protegido contra gravação</string>
-    <string name="log_particoes">Partições: %1$s</string>
-    <string name="log_ntfs">⚠ Pendrive em NTFS: no modo bloco o PS2 só lê exFAT/FAT32. Use o modo Pasta (funciona com NTFS) ou formate em exFAT.</string>
-    <string name="log_fs_desconhecido">⚠ Não reconheci exFAT/FAT32 neste disco; o PS2 pode não enxergar os jogos no modo bloco.</string>
     <string name="log_porta_falhou">%1$s: não consegui abrir a porta (%2$s)</string>
     <string name="log_ligado">%1$s ligado</string>
     <string name="log_nenhum">nenhum servidor ligou</string>
     <string name="log_erro">Erro: %1$s</string>
     <string name="log_parado">Servidor parado</string>
-    <string name="log_usb_saiu">Pendrive desconectado</string>
     <string name="err_pasta_sumiu">pasta não encontrada: %1$s</string>
-    <string name="err_usb_sumiu">pendrive não encontrado (foi desconectado?)</string>
     <string name="servindo">Servindo: %1$s</string>
 
     <!-- Dicas (diagnóstico) -->
@@ -127,9 +117,6 @@
     <string name="ft_organizado">Pasta organizada: %1$d jogo(s) movido(s).</string>
     <string name="ft_nao_movidos">Não movidos (já existem no destino ou o Android não deixou): %1$s</string>
     <string name="ft_nomes_longos">⚠ %1$d jogo(s) com nome de mais de 64 letras: alguns loaders cortam ou não mostram.</string>
-    <string name="ft_capas_baixadas">Capas: %1$d baixada(s) (de %2$d jogos).</string>
-    <string name="ft_sem_id">%1$d jogo(s) sem código legível (ISO de CD em .bin, imagem estranha).</string>
-    <string name="ft_capas_nao_achadas">Sem capa no banco: %1$s</string>
     <string name="ft_sem_internet">sem internet no celular (o cabo do PS2 não dá internet; use Wi-Fi ou dados)</string>
     <string name="ft_capas_corrigidas">Capas: %1$d convertida(s) para PNG 8-bit (de %2$d imagens).</string>
     <string name="ft_capas_falharam">Não consegui ler: %1$s</string>
@@ -150,7 +137,6 @@
     <string name="ft_lista_ok">Lista de jogos atualizada.</string>
     <string name="ft_lendo_jogo">Lendo %1$s</string>
     <string name="ft_atualizando">Atualizando a lista de jogos</string>
-    <string name="ft_auto_zso">Compactação automática:</string>
     <string name="ft_auto_tar">art.tar automático:</string>
     <string name="ft_btn_verificar">Verificar arquivos dos loaders</string>
     <string name="ft_verif_nada">Nada para conferir ainda (sem POPS/, EMBER/ ou NEUTRINO/).</string>
@@ -211,18 +197,19 @@
     <string name="ps2_titulo">No PS2 › Network settings</string>
     <string name="hint_sem_cabo">Nada conectado no cabo. Ligue o hub ao celular e o cabo ao PS2, e confira se a Ancoragem Ethernet está ligada.</string>
     <string name="hint_sem_pasta">Escolha onde estão os jogos na aba Jogos.</string>
-    <string name="hint_prot_pasta">Com o pendrive inteiro, só UDPFS e UDPBD funcionam. Escolha um deles ou use uma pasta.</string>
     <string name="btn_ir_jogos">Ir para Jogos</string>
     <string name="ip_celular">IP-do-celular</string>
     <string name="ip_ps2">IP-do-PS2</string>
     <string name="jg_local_titulo">Onde estão os jogos</string>
     <string name="jg_escolher">Toque para escolher…</string>
-    <string name="jg_usb_modo">🔌 Pendrive inteiro: %1$s</string>
-    <string name="jg_usb_ajuda">O PS2 lê o pendrive direto (UDPFS/UDPBD). A lista de jogos não aparece neste modo.</string>
-    <string name="jg_opcao_usb">🔌 Pendrive inteiro (modo bloco): %1$s</string>
     <string name="jg_resumo">%1$d de PS2 · %2$d de PS1</string>
     <string name="jg_escolha_local">Toque em \"Onde estão os jogos\" e escolha a pasta (memória, cartão ou pendrive).</string>
     <string name="log_vazio">O log aparece aqui quando o servidor liga.</string>
     <string name="ft_arte">Atualizando capas e fichas</string>
     <string name="ft_arte_ok">Arte: %1$d imagem(ns) e %2$d ficha(s) de jogo baixadas.</string>
+    <string name="mig_titulo">Modo pendrive inteiro saiu</string>
+    <string name="mig_pendrive">O modo em que o PS2 lia o pendrive inteiro direto não existe mais. O modo pasta faz o mesmo, mais rápido, e ainda mostra os jogos com capa.\n\nNa aba Jogos, toque em \"Onde estão os jogos\" e escolha o pendrive.</string>
+    <string name="usb_nao_montado_titulo">Pendrive não abriu</string>
+    <string name="usb_nao_montado_curto">Tem um pendrive conectado, mas o Android não conseguiu abrir.</string>
+    <string name="usb_nao_montado">Tem um pendrive conectado, mas o Android não abriu ele: o formato dele não é lido por este aparelho (ext4, HFS+, ou NTFS em alguns celulares), então nenhum protocolo consegue servir os jogos dele.\n\nO que fazer:\n• Formate o pendrive em exFAT no PC (copie os jogos antes) — funciona com todos os protocolos e grava capas e saves;\n• ou copie os jogos para a memória do celular ou para um cartão SD.\n\nSe ele estiver em FAT32, lembre que jogos de DVD maiores que 4 GB não cabem nesse formato.</string>
 </resources>

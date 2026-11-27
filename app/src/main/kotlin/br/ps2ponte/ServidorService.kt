@@ -5,13 +5,9 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.ServiceInfo
-import android.hardware.usb.UsbDevice
-import android.hardware.usb.UsbManager
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -19,8 +15,6 @@ import android.os.Looper
 import android.os.PowerManager
 import br.ps2ponte.core.PonteServer
 import br.ps2ponte.core.block.BlockDevice
-import br.ps2ponte.core.block.Particoes
-import br.ps2ponte.core.block.Sector512Adapter
 import br.ps2ponte.core.exfat.VirtualExFat
 import br.ps2ponte.core.fs.ArvoreIso
 import br.ps2ponte.core.fs.LocalTree
@@ -29,7 +23,6 @@ import br.ps2ponte.core.nfs.NfsServer
 import br.ps2ponte.core.smb.SmbServer
 import br.ps2ponte.core.udpbd.UdpbdServer
 import br.ps2ponte.core.udpfs.UdpfsServer
-import br.ps2ponte.usb.UsbMassStorage
 import java.io.Closeable
 import java.net.BindException
 
@@ -51,7 +44,6 @@ class ServidorService : Service() {
 
     /** Thread que fecha os servidores do último Parar (o SMB espera até 2 s; o USB pode esperar timeouts). */
     @Volatile private var fechando: Thread? = null
-    private var receptorDesconexao: BroadcastReceiver? = null
 
     /** Diagnóstico da sessão (cabo, PS2 que não aparece...), a cada segundo na thread principal. */
     private var vigia: Dicas.Vigia? = null
@@ -84,13 +76,10 @@ class ServidorService : Service() {
                 Estado.ligadoEm = 0
                 Estado.stats.reset()
                 Estado.avisar()
-                val modo = intent.getStringExtra(EXTRA_MODO) ?: MODO_PASTA
                 val pasta = intent.getStringExtra(EXTRA_PASTA).orEmpty()
-                val usb = intent.getStringExtra(EXTRA_USB).orEmpty()
-                val srv = intent.getStringArrayExtra(EXTRA_SERVIDORES)?.toSet() ?: setOf(SRV_SMB, SRV_UDPFS, SRV_UDPBD)
+                val srv = intent.getStringArrayExtra(EXTRA_SERVIDORES)?.toSet() ?: setOf(SRV_UDPFS)
                 val minha = synchronized(trava) { ++sessao }
-                if (modo == MODO_USB) vigiarDesconexao(usb)
-                Thread({ iniciar(minha, modo, pasta, usb, srv) }, "pocketps2-inicio").start()
+                Thread({ iniciar(minha, pasta, srv) }, "pocketps2-inicio").start()
             }
         }
         return START_NOT_STICKY
@@ -105,13 +94,13 @@ class ServidorService : Service() {
         return ok
     }
 
-    private fun iniciar(minha: Int, modo: String, pasta: String, usbNome: String, srv: Set<String>) {
+    private fun iniciar(minha: Int, pasta: String, srv: Set<String>) {
         val log = Estado.eventLog
         val stats = Estado.stats
         try {
             fechando?.join(5000) // espera o Parar anterior soltar as portas e o pendrive
             val novos = mutableListOf<PonteServer>()
-            if (modo == MODO_PASTA) {
+            run {
                 val nome = Fonte.descricao(this, pasta)
                 // Pendrive só leitura (NTFS): pasta de apoio no celular por cima, para VMC/CFG/capas
                 val raiz = Ferramentas.raizDe(this, pasta)
@@ -142,22 +131,6 @@ class ServidorService : Service() {
                 }
                 if (SRV_UDPFS in srv) novos += UdpfsServer(tree, exfat, log = log, stats = stats)
                 if (SRV_UDPBD in srv) novos += UdpbdServer(exfat!!, log = log, stats = stats)
-            } else {
-                val usb = getSystemService(Context.USB_SERVICE) as UsbManager
-                val dev = usb.deviceList[usbNome] ?: throw IllegalStateException(getString(R.string.err_usb_sumiu))
-                val ms = UsbMassStorage.open(usb, dev)
-                val bd: BlockDevice = if (ms.sectorSize == 512) ms else Sector512Adapter(ms)
-                if (!guardar(minha, bd) { dispositivo = bd }) return
-                val gib = bd.sectorCount * 512 / (1024.0 * 1024 * 1024)
-                Estado.log(getString(R.string.log_pendrive, ms.description, gib, if (ms.readOnly) getString(R.string.log_protegido) else ""))
-                val sistemas = Particoes.sistemas(bd)
-                if (sistemas.isNotEmpty()) Estado.log(getString(R.string.log_particoes, sistemas.joinToString()))
-                when {
-                    "NTFS" in sistemas -> Estado.log(getString(R.string.log_ntfs))
-                    sistemas.isEmpty() -> Estado.log(getString(R.string.log_fs_desconhecido))
-                }
-                if (SRV_UDPBD in srv) novos += UdpbdServer(bd, log = log, stats = stats)
-                if (SRV_UDPFS in srv) novos += UdpfsServer(null, bd, log = log, stats = stats)
             }
 
             val ligados = mutableListOf<String>()
@@ -224,8 +197,6 @@ class ServidorService : Service() {
         }
         principal.removeCallbacks(tickVigia)
         vigia = null
-        receptorDesconexao?.let { try { unregisterReceiver(it) } catch (_: Exception) {} }
-        receptorDesconexao = null
         if (parados.isNotEmpty() || dev != null) {
             // Fora da thread principal: fechar pode levar alguns segundos e travaria a tela
             fechando = Thread({
@@ -248,24 +219,6 @@ class ServidorService : Service() {
     override fun onDestroy() {
         encerrar()
         super.onDestroy()
-    }
-
-    /** No modo pendrive, para o servidor se o pendrive for desconectado (em vez de encher o log de erros). */
-    private fun vigiarDesconexao(nome: String) {
-        val r = object : BroadcastReceiver() {
-            override fun onReceive(c: Context, i: Intent) {
-                @Suppress("DEPRECATION")
-                val d: UsbDevice? = if (Build.VERSION.SDK_INT >= 33) i.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
-                else i.getParcelableExtra(UsbManager.EXTRA_DEVICE)
-                if (d?.deviceName == nome && Estado.rodando) {
-                    Estado.log(getString(R.string.log_usb_saiu))
-                    encerrar()
-                    stopSelf()
-                }
-            }
-        }
-        Compat.registrar(this, r, IntentFilter(UsbManager.ACTION_USB_DEVICE_DETACHED), exportado = true)
-        receptorDesconexao = r
     }
 
     private fun criarCanal() {
@@ -292,11 +245,8 @@ class ServidorService : Service() {
     companion object {
         const val ACAO_INICIAR = "br.ps2ponte.INICIAR"
         const val ACAO_PARAR = "br.ps2ponte.PARAR"
-        const val EXTRA_MODO = "modo"
         const val EXTRA_PASTA = "pasta"
-        const val EXTRA_USB = "usb"
         const val MODO_PASTA = "pasta"
-        const val MODO_USB = "usb"
         const val EXTRA_SERVIDORES = "servidores"
         const val SRV_SMB = "smb"
         const val SRV_UDPFS = "udpfs"
@@ -308,9 +258,9 @@ class ServidorService : Service() {
         const val PREF_HTTP_RIPTOPL = "http_riptopl"
         private const val CANAL = "servidor"
 
-        fun iniciar(ctx: Context, modo: String, pasta: String?, usb: String?, servidores: Set<String>) {
+        fun iniciar(ctx: Context, pasta: String, servidores: Set<String>) {
             val i = Intent(ctx, ServidorService::class.java).setAction(ACAO_INICIAR)
-                .putExtra(EXTRA_MODO, modo).putExtra(EXTRA_PASTA, pasta).putExtra(EXTRA_USB, usb)
+                .putExtra(EXTRA_PASTA, pasta)
                 .putExtra(EXTRA_SERVIDORES, servidores.toTypedArray())
             if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i) else ctx.startService(i)
         }
