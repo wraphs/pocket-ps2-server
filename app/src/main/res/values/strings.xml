@@ -9,7 +9,7 @@
     <!-- Status -->
     <string name="st_sem_cabo_dica">Plug in the hub/adapter and turn on Ethernet tethering. You can still start: the servers listen on every network.</string>
     <string name="st_iniciando">Starting…</string>
-    <string name="st_esperando_ps2">Waiting for the PS2… open OPL / NHDDL / Neutrino on the console.</string>
+    <string name="st_esperando_ps2">Waiting for the PS2… open the loader on the console. If it doesn\'t connect, tap the ⓘ next to PROTOCOL to see the right IP.</string>
     <string name="st_ultimo_pedido">PS2 %1$s · last request %2$s ago</string>
     <string name="velocidade">%1$.2f MB/s · %2$.1f MB transferred</string>
     <string name="btn_iniciar">▶  Start</string>
@@ -41,7 +41,6 @@
     <string name="btn_vol">%1$s (root folder)</string>
     <string name="btn_vol_usb">%1$s (USB drive)</string>
     <string name="btn_outra_pasta">Choose another folder…</string>
-    <string name="btn_digitar">Type a path…</string>
     <string name="btn_criar_opl">Create OPL folders (DVD, CD, ART…)</string>
     <string name="opl_criadas">Folders created. Put the .iso files in DVD (or CD).</string>
     <string name="caminho_titulo">Folder path</string>
@@ -170,7 +169,7 @@
     <string name="jg_log">Games log</string>
     <string name="jg_log_vazio">Nothing here yet.</string>
     <string name="cfg_rede">• IP Address Type: Static\n• IP Address: %1$s\n• Mask: 255.255.255.0\n• Gateway: %2$s\n• DNS: %2$s\n\nUse a static IP: tethering DHCP disappears for a few seconds whenever the cable glitches (error 311 on the PS2). And the IP must be on the cable network: otherwise only UDPFS/UDPBD work; SMB, NFS and HTTP do not answer.</string>
-    <string name="st_outra_rede">⚠ The PS2 has an IP from another network (%1$s). Only UDPFS/UDPBD work like this; SMB, NFS and HTTP do not. On the PS2: static IP %2$s, mask 255.255.255.0, gateway and DNS %3$s.</string>
+    <string name="st_outra_rede">⚠ The PS2 showed up on the cable, but with an IP from another network (%1$s), so it can\'t connect. In the loader, use static IP %2$s, mask 255.255.255.0, gateway and DNS %3$s — tap the ⓘ next to PROTOCOL for the steps.</string>
     <string name="esp_titulo">Low on space</string>
     <string name="esp_temporario">This may need up to %1$s, and the games folder has %2$s free.\n\nI can temporarily use %3$s (%4$s free) to build the file: it is checked there, the original is deleted (if you asked) and the new file comes back to the games folder. Nothing is left behind.</string>
     <string name="esp_manter_aviso">⚠ Keeping the original, the new file only comes back if it fits next to it. If not, it stays in the temporary place and the app tells you where.</string>
@@ -195,7 +194,6 @@
     <string name="cfg_capa_tam">Size of downloaded covers:</string>
     <string name="prot_titulo">PROTOCOL</string>
     <string name="prot_pare_antes">Stop the server before changing it.</string>
-    <string name="ps2_titulo">On the PS2 › Network settings</string>
     <string name="hint_sem_cabo">Nothing on the cable. Plug the hub into the phone and the cable into the PS2, and check that Ethernet tethering is on.</string>
     <string name="hint_sem_pasta">Choose where the games are on the Games tab.</string>
     <string name="btn_ir_jogos">Go to Games</string>
@@ -213,4 +211,8 @@
     <string name="usb_nao_montado_titulo">Drive didn\'t open</string>
     <string name="usb_nao_montado_curto">A USB drive is connected, but Android couldn\'t open it.</string>
     <string name="usb_nao_montado">A USB drive is connected, but Android didn\'t open it: this phone can\'t read its format (ext4, HFS+, or NTFS on some phones), so no protocol can serve its games.\n\nWhat to do:\n• Format the drive as exFAT on a PC (copy the games first) — it works with every protocol and saves covers and saves;\n• or copy the games to the phone storage or to an SD card.\n\nIf it is FAT32, keep in mind DVD games over 4 GB don\'t fit in that format.</string>
+    <string name="prot_como">How to set it up on the PS2</string>
+    <string name="prot_como_titulo">On the PS2 · %1$s</string>
+    <string name="cfg_auto_iniciar">Start the server by itself when the PS2 cable connects</string>
+    <string name="log_auto_iniciou">Cable connected: starting the server by itself.</string>
 </resources>

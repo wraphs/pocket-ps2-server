@@ -25,7 +25,6 @@ import android.os.Looper
 import android.os.PowerManager
 import android.provider.DocumentsContract
 import android.provider.Settings
-import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -72,8 +71,6 @@ class MainActivity : Activity() {
 
     // Servidor
     private val botoesProtocolo = LinkedHashMap<String, TextView>()
-    private lateinit var tvComoConfigurar: TextView
-    private lateinit var cartaoPs2: LinearLayout
     private lateinit var btnIniciar: Button
     private lateinit var tvDica: TextView
     private lateinit var btnDica: Button
@@ -106,9 +103,13 @@ class MainActivity : Activity() {
 
     private val ouvinte: () -> Unit = { runOnUiThread { atualizarEstado() } }
 
+    /** Já tentou ligar sozinho nesta conexão do cabo (volta a false quando o cabo sai). */
+    private var autoTentado = false
+
     private val tick = object : Runnable {
         override fun run() {
             medirVelocidade()
+            ligarSozinho()
             atualizarEstado()
             handler.postDelayed(this, 1000)
         }
@@ -332,7 +333,20 @@ class MainActivity : Activity() {
         }
 
         // Protocolo
-        raiz.addView(texto(getString(R.string.prot_titulo), 13f).apply { alpha = 0.7f; setPadding(dp(2), dp(4), 0, dp(4)) })
+        val rotulo = texto(getString(R.string.prot_titulo), 13f).apply { alpha = 0.7f; setPadding(dp(2), dp(4), 0, dp(4)) }
+        val comoFaz = TextView(this).apply {
+            text = "ⓘ"
+            textSize = tam(18f)
+            setPadding(dp(10), 0, dp(10), 0)
+            contentDescription = getString(R.string.prot_como)
+            setOnClickListener { mostrarComoConfigurar() }
+        }
+        raiz.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(rotulo)
+            addView(comoFaz)
+        })
         val chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         for ((id, nome, sub) in PROTOCOLOS) {
             val chip = TextView(this).apply {
@@ -350,11 +364,6 @@ class MainActivity : Activity() {
             botoesProtocolo[id] = chip
         }
         raiz.addView(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(chips) })
-
-        // O que preencher no PS2 (sempre com os dados do celular)
-        cartaoPs2 = cartao(raiz, 10)
-        cartaoPs2.addView(titulo(getString(R.string.ps2_titulo)).apply { textSize = tam(15f) })
-        tvComoConfigurar = texto(tamanho = 13f).apply { setTextIsSelectable(true); setLineSpacing(0f, 1.1f) }.also { cartaoPs2.addView(it) }
 
         // Iniciar no meio, com a dica do que falta logo abaixo
         btnIniciar = botao("") { iniciarOuParar() }.apply {
@@ -419,6 +428,20 @@ class MainActivity : Activity() {
             else -> getString(R.string.ajuda_udpfs, ipPs2())
         }
         return prot + "\n\n" + rede
+    }
+
+    /** Pop-up do ⓘ: o que preencher no loader para o protocolo escolhido, sempre com o IP do celular. */
+    private fun mostrarComoConfigurar() {
+        val p = protocolo()
+        val nome = PROTOCOLOS.firstOrNull { it.first == p }?.second ?: p
+        val tv = texto(comoConfigurar(p), 14f).apply {
+            setTextIsSelectable(true)
+            setLineSpacing(0f, 1.1f)
+            setPadding(dp(20), dp(8), dp(20), dp(8))
+        }
+        AlertDialog.Builder(this).setTitle(getString(R.string.prot_como_titulo, nome))
+            .setView(ScrollView(this).apply { addView(tv) })
+            .setPositiveButton(R.string.ok, null).show()
     }
 
     /** O que impede iniciar agora (texto da dica, rótulo e ação do botão), ou null se está tudo pronto. */
@@ -570,7 +593,7 @@ class MainActivity : Activity() {
             val rotulo = if (v.primario) getString(R.string.btn_vol, v.descricao) else getString(R.string.btn_vol_usb, v.descricao)
             opcoes += rotulo to { escolherVolume(v, modo) }
         }
-        opcoes += getString(if (modo == ACESSO_NORMAL) R.string.btn_outra_pasta else R.string.btn_digitar) to { outraPasta() }
+        opcoes += getString(R.string.btn_outra_pasta) to { escolherPasta() }
         // Pendrive conectado que o Android não abriu: não dá para escolher; explica o porquê
         if (pendriveNaoMontado()) opcoes += ("⚠ " + getString(R.string.usb_nao_montado_titulo)) to { mostrarPendriveNaoMontado() }
         AlertDialog.Builder(this).setTitle(R.string.jg_local_titulo)
@@ -718,6 +741,7 @@ class MainActivity : Activity() {
 
         // Servidor
         val cS = secao(getString(R.string.cfg_sec_servidor))
+        opcao(cS, getString(R.string.cfg_auto_iniciar), PREF_AUTO_INICIAR, true)
         opcao(cS, getString(R.string.op_descompactar), ServidorService.PREF_DESCOMPACTAR, true, { getString(R.string.ajuda_descompactar) })
         val cbAntigo = CheckBox(this).apply {
             text = getString(R.string.op_http_antigo)
@@ -764,8 +788,6 @@ class MainActivity : Activity() {
             chip.setTypeface(null, if (ativo) Typeface.BOLD else Typeface.NORMAL)
             chip.alpha = if (rodando && !ativo) 0.4f else 1f
         }
-        tvComoConfigurar.text = comoConfigurar(p)
-        cartaoPs2.alpha = if (Rede.cabo() == null) 0.5f else 1f
 
         // Iniciar: cinza com a dica do que falta (sem cabo, sem jogos…); some a dica quando está tudo certo
         val imp = if (rodando) null else impedimento()
@@ -804,6 +826,21 @@ class MainActivity : Activity() {
         Ferramentas.pedido?.let { if (!Ferramentas.ocupado && !mostrandoPedido) mostrarOrganizacao(it) }
     }
 
+    /**
+     * Cabo do PS2 conectado e jogos prontos: liga o servidor sem precisar tocar em Iniciar (⚙ › Servidor desliga
+     * isso). Tenta uma vez por conexão: se a pessoa parar, ele só volta a ligar sozinho depois que o cabo sair e voltar.
+     */
+    private fun ligarSozinho() {
+        if (Rede.cabo() == null) {
+            autoTentado = false
+            return
+        }
+        if (autoTentado || Estado.rodando || !prefs.getBoolean(PREF_AUTO_INICIAR, true) || impedimento() != null) return
+        autoTentado = true
+        Estado.log(getString(R.string.log_auto_iniciou))
+        iniciarOuParar()
+    }
+
     private fun medirVelocidade() {
         val agora = System.currentTimeMillis()
         val bytes = Estado.stats.bytesRead.get() + Estado.stats.bytesWritten.get()
@@ -820,6 +857,7 @@ class MainActivity : Activity() {
     private fun iniciarOuParar() {
         if (Estado.rodando) {
             ServidorService.parar(this)
+            autoTentado = true // parou na mão: não religa sozinho até o cabo sair e voltar
             return
         }
         impedimento()?.let { return aviso(it.first) }
@@ -953,28 +991,6 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun outraPasta() {
-        val modo = acesso()
-        if (modo == ACESSO_NORMAL) return escolherPasta()
-        // Root/Shizuku: o caminho é digitado (o seletor do Android não sabe dos privilégios)
-        val atual = pastaSalva()?.takeIf { Fonte.ehPriv(it) }?.let { Privilegio.caminho(it) } ?: Environment.getExternalStorageDirectory().path
-        val campo = EditText(this).apply {
-            setText(atual)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
-            setSingleLine()
-        }
-        val moldura = LinearLayout(this).apply { setPadding(dp(20), dp(8), dp(20), 0); addView(campo, LinearLayout.LayoutParams(-1, -2)) }
-        AlertDialog.Builder(this)
-            .setTitle(R.string.caminho_titulo)
-            .setView(moldura)
-            .setPositiveButton(R.string.ok) { _, _ ->
-                val c = campo.text.toString().trim().trimEnd('/')
-                if (c.startsWith("/")) definirPasta("$modo:$c")
-            }
-            .setNegativeButton(R.string.cancelar, null)
-            .show()
-    }
-
     private fun escolherPasta() {
         try {
             startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE), REQ_PASTA)
@@ -989,6 +1005,12 @@ class MainActivity : Activity() {
         if (requestCode != REQ_PASTA || resultCode != RESULT_OK) return
         val uri = data?.data ?: return
         if (uri.authority != "com.android.externalstorage.documents") return aviso(getString(R.string.av_nao_e_armazenamento))
+        val modo = acesso()
+        if (modo != ACESSO_NORMAL) {
+            // Root/Shizuku: a pasta escolhida no seletor vira caminho, lido pelo auxiliar com privilégio
+            val c = caminhoDaArvore(uri) ?: return aviso(getString(R.string.av_nao_e_armazenamento))
+            return definirPasta("$modo:$c")
+        }
         val vol = DocumentsContract.getTreeDocumentId(uri).substringBefore(':')
         if (vol.equals("primary", true) || vol.equals("home", true)) {
             // Memória interna: por caminho (mais rápido; usa o "acesso a todos os arquivos")
@@ -1206,6 +1228,7 @@ class MainActivity : Activity() {
         private const val REQ_SHIZUKU = 11
         private const val ACESSO_NORMAL = "normal"
         private const val PREF_PROTOCOLO = "protocolo"
+        private const val PREF_AUTO_INICIAR = "auto_iniciar"
 
         /** (servidor, nome, para quem) */
         private val PROTOCOLOS = listOf(

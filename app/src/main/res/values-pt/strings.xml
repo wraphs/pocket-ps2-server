@@ -8,7 +8,7 @@
     <!-- Status -->
     <string name="st_sem_cabo_dica">Ligue o hub/adaptador e ative a Ancoragem Ethernet. Dá para iniciar assim mesmo: os servidores escutam em todas as redes.</string>
     <string name="st_iniciando">Iniciando…</string>
-    <string name="st_esperando_ps2">Esperando o PS2… abra o OPL / NHDDL / Neutrino no console.</string>
+    <string name="st_esperando_ps2">Esperando o PS2… abra o loader no console. Se ele não conectar, toque no ⓘ ao lado de PROTOCOLO para ver o IP certo.</string>
     <string name="st_ultimo_pedido">PS2 %1$s · último pedido há %2$s</string>
     <string name="velocidade">%1$.2f MB/s · %2$.1f MB transferidos</string>
     <string name="btn_iniciar">▶  Iniciar</string>
@@ -40,7 +40,6 @@
     <string name="btn_vol">%1$s (raiz)</string>
     <string name="btn_vol_usb">%1$s (pendrive)</string>
     <string name="btn_outra_pasta">Escolher outra pasta…</string>
-    <string name="btn_digitar">Digitar caminho…</string>
     <string name="btn_criar_opl">Criar pastas do OPL (DVD, CD, ART…)</string>
     <string name="opl_criadas">Pastas criadas. Coloque os .iso em DVD (ou CD).</string>
     <string name="caminho_titulo">Caminho da pasta</string>
@@ -169,7 +168,7 @@
     <string name="jg_log">Log dos jogos</string>
     <string name="jg_log_vazio">Nada por aqui ainda.</string>
     <string name="cfg_rede">• IP Address Type: Static (fixo)\n• IP Address: %1$s\n• Mask: 255.255.255.0\n• Gateway: %2$s\n• DNS: %2$s\n\nUse IP fixo: o DHCP da ancoragem some por alguns segundos sempre que o cabo oscila (erro 311 no PS2). E o IP precisa ser da rede do cabo: com outro, só o UDPFS/UDPBD funcionam; SMB, NFS e HTTP não respondem.</string>
-    <string name="st_outra_rede">⚠ O PS2 está com IP de outra rede (%1$s). Só UDPFS/UDPBD funcionam assim; SMB, NFS e HTTP não. No PS2: IP fixo %2$s, máscara 255.255.255.0, gateway e DNS %3$s.</string>
+    <string name="st_outra_rede">⚠ O PS2 apareceu no cabo, mas com IP de outra rede (%1$s), então não conecta. No loader, use IP fixo %2$s, máscara 255.255.255.0, gateway e DNS %3$s — toque no ⓘ ao lado de PROTOCOLO para o passo a passo.</string>
     <string name="esp_titulo">Pouco espaço</string>
     <string name="esp_temporario">Para isso podem ser precisos até %1$s, e a pasta dos jogos tem %2$s livres.\n\nPosso usar temporariamente %3$s (%4$s livres) para montar o arquivo: ele é conferido lá, o original é apagado (se você pediu) e o arquivo novo volta para a pasta dos jogos. Nada fica para trás.</string>
     <string name="esp_manter_aviso">⚠ Mantendo o original, o arquivo novo só volta se couber ao lado dele. Se não couber, ele fica guardado no lugar temporário e o app avisa onde.</string>
@@ -194,7 +193,6 @@
     <string name="cfg_capa_tam">Tamanho das capas baixadas:</string>
     <string name="prot_titulo">PROTOCOLO</string>
     <string name="prot_pare_antes">Pare o servidor antes de trocar.</string>
-    <string name="ps2_titulo">No PS2 › Network settings</string>
     <string name="hint_sem_cabo">Nada conectado no cabo. Ligue o hub ao celular e o cabo ao PS2, e confira se a Ancoragem Ethernet está ligada.</string>
     <string name="hint_sem_pasta">Escolha onde estão os jogos na aba Jogos.</string>
     <string name="btn_ir_jogos">Ir para Jogos</string>
@@ -212,4 +210,8 @@
     <string name="usb_nao_montado_titulo">Pendrive não abriu</string>
     <string name="usb_nao_montado_curto">Tem um pendrive conectado, mas o Android não conseguiu abrir.</string>
     <string name="usb_nao_montado">Tem um pendrive conectado, mas o Android não abriu ele: o formato dele não é lido por este aparelho (ext4, HFS+, ou NTFS em alguns celulares), então nenhum protocolo consegue servir os jogos dele.\n\nO que fazer:\n• Formate o pendrive em exFAT no PC (copie os jogos antes) — funciona com todos os protocolos e grava capas e saves;\n• ou copie os jogos para a memória do celular ou para um cartão SD.\n\nSe ele estiver em FAT32, lembre que jogos de DVD maiores que 4 GB não cabem nesse formato.</string>
+    <string name="prot_como">Como configurar no PS2</string>
+    <string name="prot_como_titulo">No PS2 · %1$s</string>
+    <string name="cfg_auto_iniciar">Ligar o servidor sozinho quando o cabo do PS2 conectar</string>
+    <string name="log_auto_iniciou">Cabo conectado: ligando o servidor sozinho.</string>
 </resources>
